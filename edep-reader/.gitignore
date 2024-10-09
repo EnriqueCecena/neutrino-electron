@@ -1,0 +1,8 @@
+build/*
+*.root
+.vscode/*
+install/*
+examples/build/
+examples/install/
+examples/build/*
+examples/install/*
