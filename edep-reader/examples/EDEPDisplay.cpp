@@ -1,4 +1,8 @@
 #include <TFile.h>
+#include <vector>
+#include <TBranch.h>
+#include <TTree.h>
+#include <TLeaf.h>
 #include <TGeoManager.h>
 #include <TCanvas.h>
 #include <TROOT.h>
@@ -6,7 +10,6 @@
 #include <TGraph.h>
 #include <TMultiGraph.h>
 
-#include <iostream>
 
 
 #include "EDEPTree.h"
@@ -64,8 +67,9 @@ int main(int argc, char *argv[])
   // // auto ev_max = std::atoi(argv[2]);
 
   // get digits and mc info for event
-  tMc.SetEntry(10);
-
+  for (uint j = 0; j < 2005; j++){ 
+  tMc.SetEntry(j);
+ 
   
   EDEPTree tree;
   std::cout << "########### Inizializing tree from edep trajectories and hits" << std::endl;
@@ -94,8 +98,11 @@ int main(int argc, char *argv[])
     } else {
       zy->SetLineColor(colorMap[0]);
     }
+
     for (uint i = 0; i < points.size(); i++) {
       zy ->SetPoint(i, points[i].GetPosition().Z(), points[i].GetPosition().Y());
+      //This line prints out the energy
+      std::cout << "Energy: " << points[i].GetPosition().Energy();
     }
     zy->Draw("L");
   }
@@ -119,12 +126,38 @@ int main(int argc, char *argv[])
       zy->Draw("P");
       }
   }
+  std::string guardar= "event" +std::to_string(j) +".png";
+  cev->SaveAs(guardar.c_str());
+}
 
-  cev->SaveAs("event1.png");
+    TFile *file = TFile::Open("/pnfs/dune/persistent/users/abooth/nd-production/MicroProdN1p1/output/run-hadd/MicroProdN1p1_NDLAr_1E18_RHC.nu.hadd/EDEPSIM/0000000/0000000/MicroProdN1p1_NDLAr_1E18_RHC.nu.hadd.0000060.EDEPSIM.root");
 
+    // Check if the file was successfully opened
+    if (!file || file->IsZombie()) {
+        std::cerr << "Error opening file!" << std::endl;
+        return 1;
+    }
 
+    // Get the tree from the file
+    TTree *arbol = nullptr;
+    file->GetObject("EDepSimEvents", arbol);
 
+    if (!arbol) {
+        std::cerr << "Tree not found in file!" << std::endl;
+        return 1;
+    }
 
+//There's at least 2005 entries on each branch
+   arbol->Print();
+ 
+   TBranch *branch = arbol->GetBranch("Trajectories.Points");
+    if (!branch) {
+        std::cerr << "Branch not found!" << std::endl;
+        return 1;
+    }
+   std::cout << "Trajectories.Points Found";
+  
+    
 
 
     // std::cout << "########### Filtering all the trajectories with hits in argon" << std::endl;
