@@ -9,8 +9,8 @@
 #include <TTreeReader.h>
 #include <TGraph.h>
 #include <TMultiGraph.h>
-
-
+#include <typeinfo>
+#include "TH1F.h"
 
 #include "EDEPTree.h"
 
@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
   std::vector<EDEPTrajectory> filteredTrj;
   
   tree.Filter(std::back_insert_iterator<std::vector<EDEPTrajectory>>(filteredTrj), [] (const EDEPTrajectory& trj) { return (true/*trj.HasHitAfterTime(100) && trj.HasHitInDetector(component::STRAW)*/);});
-
+  std::vector<double> ener;
   
   // Draw Trajectory Points
   for (const auto& trj:filteredTrj) {
@@ -102,8 +102,10 @@ int main(int argc, char *argv[])
     for (uint i = 0; i < points.size(); i++) {
       zy ->SetPoint(i, points[i].GetPosition().Z(), points[i].GetPosition().Y());
       //This line prints out the energy
-      std::cout << "Energy: " << points[i].GetPosition().Energy();
-    }
+      std::cout << points[i].GetPosition().Energy()<<std::endl;
+      std::cout << typeid(points[i].GetPosition().Energy()).name() << std::endl;
+      ener.push_back(points[i].GetPosition().Energy());
+      }
     zy->Draw("L");
   }
   
@@ -127,7 +129,24 @@ int main(int argc, char *argv[])
       }
   }
   std::string guardar= "event" +std::to_string(j) +".png";
+  std::string store= "Energy" +std::to_string(j) +".png";
+
   cev->SaveAs(guardar.c_str());
+
+  cev->Close();
+  TCanvas* En = new TCanvas("enev", "Event 1", 1000, 1000);
+  TH1F *hist = new TH1F("hist", "Energy;X-axis;Energy-(MeV)", 100, 0, 1000);
+  for (uint k=0; k<ener.size();k++){
+     hist->Fill(ener[k]); 
+  }
+  En->cd();
+  hist->Draw();
+  
+  En->SaveAs(store.c_str());
+  En->Close();
+  delete hist;
+  ener.clear();
+// clears the info inside the vector to create another histogram
 }
 
     TFile *file = TFile::Open("/pnfs/dune/persistent/users/abooth/nd-production/MicroProdN1p1/output/run-hadd/MicroProdN1p1_NDLAr_1E18_RHC.nu.hadd/EDEPSIM/0000000/0000000/MicroProdN1p1_NDLAr_1E18_RHC.nu.hadd.0000060.EDEPSIM.root");
