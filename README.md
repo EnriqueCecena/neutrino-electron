@@ -1,4 +1,4 @@
-# Virtual enviroment to analyse the hdf5 files
+# Virtual environment to analyse the hdf5 files
 
 This document provides the necessary instructions to set up the software required for analyzing `.hdf5` files.
 
