@@ -4,11 +4,11 @@ Created By: Jordan Ellis
 Supervised By: Abigail Waldron
 (Queen Mary University London)
 
-Introduction
+Introduction:
 
 The Dune Experiment Data Analysis App is a graphical user interface (GUI) tool developed using Python’s Tkinter library. It is designed to facilitate the analysis of simulation data from the DUNE (Deep Underground Neutrino Experiment) project. The application allows users to view datasets, create machine learning datasets, visualize data through various plots (including custom plots), and manage settings related to data processing.
 
-Features
+Features:
 
 	•	Dataset Viewing: Navigate through different datasets and inspect detailed segments, metadata, and trajectories.
 	•	Machine Learning Dataset Creation: Generate datasets suitable for training and evaluating machine learning models, with progress tracking and preview functionality.
@@ -18,13 +18,13 @@ Features
 	•	Progress Tracking: Monitor the progress of dataset creation and plotting tasks with responsive progress bars.
 	•	Settings Configuration: Adjust application settings to suit different analysis requirements, including file selections and application parameters.
 
-Installation
+Installation:
 
-Prerequisites
+Prerequisites:
 
 	•	Python 3.7 or higher: Ensure Python is installed on your system. Download it from python.org.
 
-Install Dependencies
+Install Dependencies:
 
 It’s recommended to use a virtual environment to manage dependencies.
 
