@@ -198,9 +198,7 @@ class Custom_Plot():
 
                         plt.close()
 
-                    if location == 5:
-                        break
-                    
+            
             print('\n\n Complete')
 
         return 
