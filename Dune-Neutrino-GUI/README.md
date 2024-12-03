@@ -26,6 +26,14 @@ Ensure you have the following Python libraries installed:
 - `pandas`
 - `tkinter`
 - `matplotlib`
+- `threading`
+
+
+Ensure you have the following scripts in the same directory as "Main_Run_File.py":
+
+- `pdg_id_script.py`
+- `Generic_Plot_script.py`
+- `Custom_Plot_script.py`
 
 You can install the required libraries using `pip`:
 
