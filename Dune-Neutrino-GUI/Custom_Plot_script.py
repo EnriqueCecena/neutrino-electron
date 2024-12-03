@@ -144,7 +144,7 @@ class Custom_Plot():
             with PdfPages(pdf_name) as output:
 
                 for location , event in enumerate(unique_event_ids , start=1):
-                    Figure_Creation_Page.Progression(self= self,  possision= location , termination=len(unique_event_ids))
+
                     temp_df_event = temp_df[ temp_df['event_id'] == event ]
                     temp_df_particle_event = temp_df_particle[temp_df_particle['event_id'] == event ]
 
@@ -198,7 +198,9 @@ class Custom_Plot():
 
                         plt.close()
 
-            
+                    if location == 5:
+                        break
+                    
             print('\n\n Complete')
 
         return 
