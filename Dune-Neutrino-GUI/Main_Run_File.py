@@ -20,8 +20,9 @@ matplotlib.use('agg')  # If I don't change the backend of matplotlib while creat
 import threading
 
 # Backend scripts:
-import Custom_Plot_script
 import pdg_id_script
+import Generic_Plot_script
+import Custom_Plot_script
 
 
 class App(tk.Tk):
@@ -146,7 +147,10 @@ class App(tk.Tk):
        
         # self.current_frame = 
         # Dynamically resize window based on the frame
-        if page == File_Selection_Page:
+        if page == StartPage:
+            self.geometry("400x300")  # Default size for other pages
+
+        elif page == File_Selection_Page:
             self.geometry("800x500")  # Larger size for File Selection Page
         
         
@@ -557,7 +561,7 @@ class Create_Dataset_Page(tk.Frame):
         toolbar = NavigationToolbar2Tk(canvas, self.Preview_Fig_Frame, pack_toolbar=False)
         toolbar.update()
         toolbar.pack(side=tk.LEFT, fill=tk.X)
-        self.controller.geometry("900x900")
+        # self.controller.geometry("900x900")
 
 
         return
@@ -952,169 +956,25 @@ class Figure_Creation_Page(tk.Frame):
 
     def Plot_Type_Map(self, *args):
         if self.controller.plot_type == 'scatter':
-            self.Create_Scatter_Fig()
+
+            Generic_Plot_script.Generic_Plot.Create_Scatter_Fig(self)
+
             pass
 
         elif self.controller.plot_type == 'line':
-            self.Create_Line_PLot()
+
+            Generic_Plot_script.Generic_Plot.Create_Line_PLot(self)
+
             pass
 
         elif self.controller.plot_type == 'hist':
-            self.Create_Hist_Fig()
+
+            Generic_Plot_script.Generic_Plot.Create_Hist_Fig(self)
+
             pass
 
         return
     
-    #All of the Scatter Plots should be handled here ... in a ideal world. 
-    def Create_Scatter_Fig(self, *args):
-
-
-        path = os.path.join(  self.controller.Data_Directory , self.file_selected.get() )
-        with h5py.File(path , 'r') as sim_h5:
-            temp_df =  pd.DataFrame(sim_h5["segments"][()])
-            temp_df = temp_df[ ( temp_df['dE'] > 2 ) & ( temp_df['event_id'] == int(self.event_combobox.get()) ) ]
-
-        # Create Canvas
-        # Destroy old widgets in the Figure_Frame
-        if hasattr(self, 'fig'):
-            plt.close(self.fig)  # Close the old figure
-        for widget in self.Figure_Frame.winfo_children():
-            widget.destroy()
-
-
-        if self.dropdown_3d_select.get() == 'Yes':
-            self.fig, self.ax = plt.subplots( subplot_kw=dict(projection='3d') )
-    
-        else:
-            self.fig, self.ax = plt.subplots( )
-
-        canvas = FigureCanvasTkAgg( self.fig, master= self.Figure_Frame)  
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-        if str(self.cmap_yes_no.get()) == 'Yes' and str(self.cmap_selection_combobox.get()) != '' :
-            cmap = colormaps[ self.cmap_selection_combobox.get() ]
-            # cmap = cm['plasma']
-
-            norm = plt.Normalize(vmin=0, vmax= 75)
-            c = temp_df['dE']
-
-        else:
-            cmap = None
-            norm = None
-            c    = None
-
-        if self.dropdown_3d_select.get() == 'Yes':
-
-            scatter = self.ax.scatter( temp_df[ self.x_combobox.get() ] , temp_df[ self.y_combobox.get() ] , temp_df[ self.z_combobox.get() ] , c = c ,cmap = cmap , norm= norm)
-            self.ax.set_zlabel( self.z_combobox.get() )
-
-
-        else:
-            self.ax.scatter( temp_df[ self.x_combobox.get() ] , temp_df[ self.y_combobox.get() ] , c = c ,cmap = cmap , norm= norm)
-
-
-        self.ax.set_xlabel( self.x_combobox.get() )
-        self.ax.set_ylabel( self.y_combobox.get() )
-        canvas.draw()
-
-        self.fig.colorbar( scatter , ax=self.ax ,  shrink=0.5, aspect=10)
-
-        toolbar = NavigationToolbar2Tk(canvas, self.Figure_Frame, pack_toolbar=False)
-        toolbar.update()
-        toolbar.pack(side=tk.LEFT, fill=tk.X)
-
-        self.controller.geometry("900x900")
-
-    # All generic line plots should be creeated here... line plots are not usefull
-    def Create_Line_PLot(self , *args):
-
-        path = os.path.join(  self.controller.Data_Directory , self.file_selected.get() )
-        with h5py.File(path , 'r') as sim_h5:
-            temp_df =  pd.DataFrame(sim_h5["segments"][()])
-            temp_df = temp_df[ ( temp_df['dE'] > 2 ) & ( temp_df['event_id'] == int(self.event_combobox.get()) ) ]
-
-        # Create Canvas
-        # Destroy old widgets in the Figure_Frame
-        if hasattr(self, 'fig'):
-            plt.close(self.fig)  # Close the old figure
-        for widget in self.Figure_Frame.winfo_children():
-            widget.destroy()
-
-
-        self.fig, self.ax = plt.subplots()
-
-        canvas = FigureCanvasTkAgg( self.fig, master= self.Figure_Frame)  
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-
-        self.ax.plot( temp_df[ self.x_combobox.get() ] , temp_df[ self.y_combobox.get() ] )
-        self.ax.set_xlabel( self.x_combobox.get() )
-        self.ax.set_ylabel( self.y_combobox.get() )
-        canvas.draw()
-
-        toolbar = NavigationToolbar2Tk(canvas, self.Figure_Frame, pack_toolbar=False)
-        toolbar.update()
-        toolbar.pack(side=tk.LEFT, fill=tk.X)
-
-        self.controller.geometry("900x900")
-
-
-    # All of the Hist Plots should be handled here ... in a ideal world. 
-    def Create_Hist_Fig(self, *args):
-
-        path = os.path.join(  self.controller.Data_Directory , self.file_selected.get() )
-        with h5py.File(path , 'r') as sim_h5:
-            temp_df =  pd.DataFrame(sim_h5["segments"][()])
-            temp_df = temp_df[ ( temp_df['dE'] > 2 ) & ( temp_df['event_id'] == int(self.event_combobox.get()) ) ]
-
-        # Create Canvas
-        # Destroy old widgets in the Figure_Frame
-        if hasattr(self, 'fig'):
-            plt.close(self.fig)  # Close the old figure
-        for widget in self.Figure_Frame.winfo_children():
-            widget.destroy()
-
-        self.fig, self.ax = plt.subplots()
-        canvas = FigureCanvasTkAgg( self.fig, master= self.Figure_Frame)  
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-        if str(self.group_yes_no.get()) == 'Yes' and str(self.hist_option_select.get() )!= '':
-            hist_list = []
-            name_list = []
-            for group_name, group_df in temp_df.groupby( self.hist_option_select.get() ):
-                hist_list.append( group_df[ self.x_combobox.get() ].to_list() )
-
-                if self.hist_option_select.get() == 'pdg_id':
-                    name_list.append( self.controller.pdg_id_map[ str(group_name) ]  )
-                else:
-                    name_list.append(group_name)
-
-            self.ax.hist( hist_list , bins = 100 , stacked = True , label = name_list )
-            self.ax.set_title(f"Grouped By : { self.hist_option_select.get() }")
-            plt.legend(fontsize = 7 , loc="upper right")
-
-
-        else:
-            self.ax.hist( temp_df[ self.x_combobox.get() ] , bins = 100)
-
-        self.ax.set_xlabel( self.x_combobox.get() )
-        self.ax.set_ylabel( 'Frequency' )
-
-        toolbar = NavigationToolbar2Tk(canvas, self.Figure_Frame, pack_toolbar=False)
-        toolbar.update()
-        toolbar.pack(side=tk.LEFT, fill=tk.X)
-        self.controller.geometry("900x900")
-        return
-
-
-    def Progression(self , possision , termination , note =''):
-        progress = 100 * (possision / float(termination))
-        bar = str('~'*(100-(100-int(progress)))+'→' +' ' * (100-int(progress)))
-        print( "\r¦{}¦ {:.0f}% {:}".format( bar ,progress , note ),end='')
-
-
-
-
 
         
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
