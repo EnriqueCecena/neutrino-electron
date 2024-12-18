@@ -1179,38 +1179,59 @@ class Model_Training_Page(tk.Frame):
 
 
     def Train_Model(self):
-        from PIL import Image
-        import os
 
-        # Determine original image size
-        first_image_path = os.path.join(self.selected_dir.get(), os.listdir(self.selected_dir.get())[0])
-        with Image.open(first_image_path) as img:
-            original_size = img.size  # (width, height)
+        selected_dir = self.selected_dir.get()
+
+        # Function to find the first image file in the directory or its subdirectories
+        def find_first_image(directory):
+            for root, dirs, files in os.walk(directory):
+                for file in files:
+                    if file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                        return os.path.join(root, file)
+            return None
+
+        first_image_path = find_first_image(selected_dir)
+
+        if not first_image_path:
+            print("No image files found in the selected directory.")
+            return
+
+        try:
+            with Image.open(first_image_path) as img:
+                original_size = img.size  # (width, height)
+        except Exception as e:
+            print(f"Error opening image {first_image_path}: {e}")
+            return
+
         original_width, original_height = original_size
 
         # Load dataset with original image size
         Raw_Data = tf.keras.utils.image_dataset_from_directory(
-            self.selected_dir.get(),
-            image_size=(original_height, original_width),
-            batch_size=32,  # Adjust as needed
+            selected_dir,
+            # image_size=(original_height, original_width),
+            # batch_size=32,  # Adjust as needed
             shuffle=True,
             seed=123,
             label_mode='int'
         )
 
-        # Split the dataset
-        total_size = len(Raw_Data)
-        if ( self.train_size_text_selected.get() + 
-             self.val_size_text_selected.get()   + 
-             self.test_size_text_selected.get()  )  ==  100:
-            
-            train_size  = int(total_size * (self.train_size_text_selected.get() / 100))
-            val_size    = int(total_size * (self.val_size_text_selected.get() / 100))
-            test_size   = int(total_size * (self.test_size_text_selected.get() / 100))
-        else:
-            print("Not Adding up to 100")
+        # Calculate total size
+        total_size = Raw_Data.cardinality().numpy()
+
+        # Ensure sizes add up to total dataset size
+        train_percent = self.train_size_text_selected.get()
+        val_percent = self.val_size_text_selected.get()
+        test_percent = self.test_size_text_selected.get()
+
+        if (train_percent + val_percent + test_percent) != 100:
+            print("Train, validation, and test sizes do not add up to 100%.")
             return
-        
+
+        train_size = int(total_size * (train_percent / 100))
+        val_size = int(total_size * (val_percent / 100))
+        test_size = int(total_size * (test_percent / 100))
+
+        # Split the dataset
         train = Raw_Data.take(train_size)
         val = Raw_Data.skip(train_size).take(val_size)
         test = Raw_Data.skip(train_size + val_size).take(test_size)
@@ -2146,7 +2167,7 @@ class Frame_Manager():
 
             else:
                 print(self.__class__.__name__ )
-                self.Create_Fig_Button.config(state='disabled')
+                # self.Create_Fig_Button.config(state='disabled')
                 Frame_Manager.check_progress(self)
 
                 threading.Thread(target=Pixel_Array_Script.Use_Pixel_Array.plot, args=(self,)).start()
