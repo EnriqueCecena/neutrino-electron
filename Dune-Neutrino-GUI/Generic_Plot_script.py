@@ -22,79 +22,80 @@ class Generic_Plot:
         # Construct the full path to the selected HDF5 file
         path = os.path.join(self.controller.Data_Directory, self.file_selected.get())
         
+        if self.pixel_array_select.get() != 'Yes':
+            with h5py.File(path, 'r') as sim_h5:
+                temp_df = pd.DataFrame(sim_h5["segments"][()])
+                # Filter the DataFrame for dE > 2 and the selected event_id
+                temp_df = temp_df[
+                    (temp_df['dE'] > 2) & 
+                    (temp_df['event_id'] == int(self.event_combobox.get()))
+                ]
 
-        with h5py.File(path, 'r') as sim_h5:
-            temp_df = pd.DataFrame(sim_h5["segments"][()])
-            # Filter the DataFrame for dE > 2 and the selected event_id
-            temp_df = temp_df[
-                (temp_df['dE'] > 2) & 
-                (temp_df['event_id'] == int(self.event_combobox.get()))
-            ]
+            # Close the previous figure if it exists
+            if hasattr(self, 'fig'):
+                plt.close(self.fig)
+            
+            # Remove all existing widgets from the Figure_Frame
+            for widget in self.Figure_Frame.winfo_children():
+                widget.destroy()
 
-        # Close the previous figure if it exists
-        if hasattr(self, 'fig'):
-            plt.close(self.fig)
-        
-        # Remove all existing widgets from the Figure_Frame
-        for widget in self.Figure_Frame.winfo_children():
-            widget.destroy()
+            # Determine whether to create a 3D scatter plot based on user selection
+            if self.dropdown_3d_select.get() == 'Yes':
+                self.fig, self.ax = plt.subplots(subplot_kw=dict(projection='3d'))
+            else:
+                self.fig, self.ax = plt.subplots()
 
-        # Determine whether to create a 3D scatter plot based on user selection
-        if self.dropdown_3d_select.get() == 'Yes':
-            self.fig, self.ax = plt.subplots(subplot_kw=dict(projection='3d'))
-        else:
-            self.fig, self.ax = plt.subplots()
+            # Create a matplotlib canvas and add it to the Figure_Frame
+            canvas = FigureCanvasTkAgg(self.fig, master=self.Figure_Frame)
+            canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-        # Create a matplotlib canvas and add it to the Figure_Frame
-        canvas = FigureCanvasTkAgg(self.fig, master=self.Figure_Frame)
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+            # Determine if a colormap should be applied
+            if (str(self.cmap_yes_no.get()) == 'Yes' and  str(self.cmap_selection_combobox.get()) != ''):
+                cmap = colormaps[self.cmap_selection_combobox.get()]
+                norm = plt.Normalize(vmin=0, vmax=75)
+                c = temp_df['dE']
+                
+            else:
+                cmap = None
+                norm = None
+                c = None
 
-        # Determine if a colormap should be applied
-        if (str(self.cmap_yes_no.get()) == 'Yes' and 
-            str(self.cmap_selection_combobox.get()) != ''):
-            cmap = colormaps[self.cmap_selection_combobox.get()]
-            norm = plt.Normalize(vmin=0, vmax=75)
-            c = temp_df['dE']
-        else:
-            cmap = None
-            norm = None
-            c = None
+            # Create the scatter plot (3D or 2D)
+            if self.dropdown_3d_select.get() == 'Yes':
+                scatter = self.ax.scatter(
+                    temp_df[self.x_combobox.get()],
+                    temp_df[self.y_combobox.get()],
+                    temp_df[self.z_combobox.get()],
+                    c=c,
+                    cmap=cmap,
+                    norm=norm
+                )
+                self.ax.set_zlabel(self.z_combobox.get())
+            else:
+                scatter = self.ax.scatter(
+                    temp_df[self.x_combobox.get()],
+                    temp_df[self.y_combobox.get()],
+                    c=c,
+                    cmap=cmap,
+                    norm=norm
+                )
 
-        # Create the scatter plot (3D or 2D)
-        if self.dropdown_3d_select.get() == 'Yes':
-            scatter = self.ax.scatter(
-                temp_df[self.x_combobox.get()],
-                temp_df[self.y_combobox.get()],
-                temp_df[self.z_combobox.get()],
-                c=c,
-                cmap=cmap,
-                norm=norm
-            )
-            self.ax.set_zlabel(self.z_combobox.get())
-        else:
-            scatter = self.ax.scatter(
-                temp_df[self.x_combobox.get()],
-                temp_df[self.y_combobox.get()],
-                c=c,
-                cmap=cmap,
-                norm=norm
-            )
+            # Set axis labels based on user selections
+            self.ax.set_xlabel(self.x_combobox.get())
+            self.ax.set_ylabel(self.y_combobox.get())
 
-        # Set axis labels based on user selections
-        self.ax.set_xlabel(self.x_combobox.get())
-        self.ax.set_ylabel(self.y_combobox.get())
+            # Render the canvas
+            canvas.draw()
 
-        # Render the canvas
-        canvas.draw()
+            # Add a colorbar to the figure if a scatter plot with colors is created
+            if cmap is not None:
+                self.fig.colorbar(scatter, ax=self.ax, shrink=0.5, aspect=10)
 
-        # Add a colorbar to the figure if a scatter plot with colors is created
-        if cmap is not None:
-            self.fig.colorbar(scatter, ax=self.ax, shrink=0.5, aspect=10)
+            # Add a navigation toolbar to the Figure_Frame
+            toolbar = NavigationToolbar2Tk(canvas, self.Figure_Frame, pack_toolbar=False)
+            toolbar.update()
+            toolbar.pack(side=tk.LEFT, fill=tk.X)
 
-        # Add a navigation toolbar to the Figure_Frame
-        toolbar = NavigationToolbar2Tk(canvas, self.Figure_Frame, pack_toolbar=False)
-        toolbar.update()
-        toolbar.pack(side=tk.LEFT, fill=tk.X)
 
     def Create_Line_PLot(self, *args):
         """
