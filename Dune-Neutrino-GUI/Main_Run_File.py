@@ -13,6 +13,10 @@ from matplotlib import colormaps
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg , NavigationToolbar2Tk)
 from matplotlib.backends.backend_pdf import PdfPages
 
+from PIL import Image, ImageTk # Used For displaying embedded images (png files)
+
+import tensorflow as tf
+from keras import models, layers
 
 import matplotlib
 matplotlib.use('agg')  # If I don't change the backend of matplotlib while creating plots it will clash with my progress bar backend and crash my window 😅
@@ -23,6 +27,7 @@ import threading
 import pdg_id_script
 import Generic_Plot_script
 import Custom_Plot_script
+import Pixel_Array_Script
 
 
 class App(tk.Tk):
@@ -36,7 +41,7 @@ class App(tk.Tk):
             # print(f"{frame_class.__name__} has been destroyed.")
         else:
             pass 
-            # print(f"{frame_class.__name__} not found in frames.")
+
 
     def _reinitialize_frame(self, frame_class):
         """Internal method to handle re-initialize a frame."""
@@ -50,14 +55,10 @@ class App(tk.Tk):
         super().__init__()
         self.title("Msci Project App")
         self.geometry("400x300")
+        
+        os.system('cls||clear')
+        print("RUNNING")
 
-
-
-
-        # Import and Shuffle pdg_id_map for cmapping
-        # temp_items = list( pdg_id_map.items() )
-        # np.random.shuffle(temp_items)
-        # pdg_id_map = dict( temp_items )
         self.cmap = cm.plasma
         # Add destroy and reinitialize methods, because of headaches.
         self.destroy_frame      = self._destroy_frame
@@ -74,13 +75,15 @@ class App(tk.Tk):
         self.plot_type          = 'scatter'             # Set initial plot_type state, should help with cleaning up code. 
 
         self.running = False
+        self.model   = None
 
-        self.max_z_for_plot = round(950)
-        self.max_y_for_plot = round(100)
+        self.max_z_for_plot = round(918.2)
+        self.min_z_for_plot = round(415.8)
+
+        self.max_y_for_plot = round(82.9)
+        self.min_y_for_plot = round(-216.7)
+
         self.max_x_for_plot = round(350)
-
-        self.min_z_for_plot = round(400)
-        self.min_y_for_plot = round(-250)
         self.min_x_for_plot = round(-350)
 
         # Retrieve and sort file names
@@ -89,7 +92,7 @@ class App(tk.Tk):
         sorted_keys = sorted(Temp_File_Names_Dict.keys())
         File_Names = [Temp_File_Names_Dict[i] for i in sorted_keys]
         self.File_Names = File_Names
-        self.Allowed_Files = self.File_Names.copy()
+        self.Allowed_Files = []
 
         self.input_type = input_type
         self.det_complex = det_complex
@@ -110,11 +113,16 @@ class App(tk.Tk):
             View_traj_Page,
             Dataset_Page,
             Create_Dataset_Page,
+            Load_Dataset_Page,
             Plot_Selection_Page,
             Figure_Creation_Page,
             Custom_Figure_Page,
+            Training_And_Eval_Options_Page,
+            Model_Architecture_Page,
+            Model_Training_Page,
             Settings_Page,
-            File_Selection_Page
+            File_Selection_Page,
+            Cleaning_Method_Select_Page
         ]
 
         # Initialize all frames
@@ -144,14 +152,13 @@ class App(tk.Tk):
         """Bring a frame to the front and refresh its content if applicable."""
         frame = self.frames[page]
 
-       
-        # self.current_frame = 
+    
         # Dynamically resize window based on the frame
         if page == StartPage:
             self.geometry("400x300")  # Default size for other pages
 
         elif page == File_Selection_Page:
-            self.geometry("800x500")  # Larger size for File Selection Page
+            self.geometry("1000x500")  # Larger size for File Selection Page
         
         
         # Larger size for View Segments Page
@@ -159,7 +166,7 @@ class App(tk.Tk):
             self.geometry("1600x500")  
 
 
-        elif page == Figure_Creation_Page or Custom_Figure_Page or page == Create_Dataset_Page:
+        elif page == Figure_Creation_Page or page ==  Custom_Figure_Page or page == Create_Dataset_Page:
             # Get the current window size as a string
             window_size = self.geometry()
             
@@ -178,6 +185,16 @@ class App(tk.Tk):
 
             else:
                 self.geometry('900x900')
+
+        elif page == Model_Architecture_Page:
+            self.geometry('900x500')
+
+        elif page == Model_Training_Page :
+            self.geometry('1000x500')
+
+        elif page == Load_Dataset_Page:
+            self.geometry('1000x700')
+
 
         else:
             self.geometry("400x300")  # Default size for other pages
@@ -204,7 +221,7 @@ class StartPage(tk.Frame):
         tk.Button(self, text="Create ML Dateset",
                   command=lambda: controller.show_frame(Dataset_Page)).pack(anchor='w')
         tk.Button(self, text="Train & Evaluate ML Model",
-                  command=lambda: controller.show_frame(Dataset_Page)).pack(anchor='w')
+                  command=lambda: controller.show_frame(Training_And_Eval_Options_Page)).pack(anchor='w')
         tk.Button(self, text="Go to Settings",
                   command=lambda: controller.show_frame(Settings_Page)).pack(anchor='w' ,pady=(20,20))
 
@@ -437,7 +454,7 @@ class Dataset_Page(tk.Frame):
                   command=lambda: controller.show_frame(Create_Dataset_Page)).pack( anchor='w')
 
         tk.Button(self, text="Load",
-                  command=lambda: controller.show_frame(StartPage)).pack(anchor='w')
+                  command=lambda: controller.show_frame(Load_Dataset_Page)).pack(anchor='w')
 
         tk.Button(self, text="Back to Start Page",
                   command=lambda: controller.show_frame(StartPage)).pack(anchor='w')
@@ -448,258 +465,806 @@ class Create_Dataset_Page(tk.Frame):
         super().__init__(parent)
 
         self.controller = controller
+        self.selected_files = []
+        self.file_vars = []
 
         # Header Frame: Back button and Header label
         self.header_frame = tk.Frame(self)
-        self.header_frame.pack(anchor='w', padx=10, pady=20)  
+        self.header_frame.pack(anchor='w', padx=10, pady=20)
 
         # Back Button
-        back_button = tk.Button( self.header_frame,  text='Back',   command=lambda: controller.show_frame(Dataset_Page)  )
+        back_button = tk.Button(self.header_frame, text='Back', command=lambda: controller.show_frame(Dataset_Page))
         back_button.pack(side=tk.LEFT)
 
         # Header Label
-        header_label = tk.Label( self.header_frame,  text="Create Dataset",  font=("Helvetica", 16) )
+        header_label = tk.Label(self.header_frame, text="Create Dataset", font=("Helvetica", 16))
         header_label.pack(side=tk.LEFT, padx=150)
 
         # Progress Bar and Percentage Frame
         self.progressive_frame = tk.Frame(self)
-        self.progressive_frame.pack(anchor='w', padx=10, pady=(0, 20))  
+        self.progressive_frame.pack(anchor='w', padx=10, pady=(0, 20))
 
-        # self.progress = ttk.Progressbar( self.progressive_frame,  orient="horizontal", length=600,  mode="determinate" ) 
-        self.progress = ttk.Progressbar( self.progressive_frame,  orient="horizontal", length=600,  mode="determinate" ) 
-        self.progress_label = tk.Label(self.progressive_frame , text = '' , font=("Arial", 12))
-        self.progress.pack(anchor='w' , side=tk.LEFT)
-        self.progress_label.pack(anchor='w' , side=tk.LEFT )
+        self.progress = ttk.Progressbar(self.progressive_frame, orient="horizontal", length=600, mode="determinate")
+        self.progress_label = tk.Label(self.progressive_frame, text='', font=("Arial", 12))
+        self.progress.pack(anchor='w', side=tk.LEFT)
+        self.progress_label.pack(anchor='w', side=tk.LEFT)
 
-        # File Selection Frame
+        # File Selection Frame (now replaced by a scrollable frame of checkboxes)
         self.file_select_frame = tk.Frame(self)
-        self.file_select_frame.pack(anchor='w', padx=10, pady=(0, 20))  
-        # File Selection Label
-        file_label = tk.Label(self.file_select_frame, text="File: ")
-        file_label.pack(side=tk.LEFT)
+        self.file_select_frame.pack(anchor='w', padx=10, pady=(0, 20))
 
-        # File Dropdown (Combobox)
-        self.file_selected = tk.StringVar()
-        self.file_combobox = ttk.Combobox( self.file_select_frame,  textvariable=self.file_selected,  values=controller.Allowed_Files,  state='readonly',  width=60 )
-        self.file_combobox.pack(side=tk.LEFT, padx=(5, 0))  
+        tk.Label(self.file_select_frame, text="Select Files:").pack(anchor='w')
 
-        # Interact Frame ... running out of names
+        # Scrollable frame for the file list
+        scroll_frame = ScrollableFrame(self.file_select_frame)
+        scroll_frame.pack(fill="both", expand=True, pady=5 )
 
+        # Determine which files to show
+        allowed_files = getattr(controller, 'Allowed_Files', [])
+        if not allowed_files:
+            # If no allowed files, show all files in directory
+            all_files_in_dir = os.listdir(controller.Data_Directory)
+            # Optionally, filter by extension
+            # all_files_in_dir = [f for f in all_files_in_dir if f.endswith('.h5')]
+            allowed_files = all_files_in_dir
+
+        # Create Checkbuttons for allowed files with increased width
+        for file in sorted(allowed_files):
+            var = tk.IntVar()
+            c = tk.Checkbutton(scroll_frame.scrollable_frame, text=file, variable=var, anchor='w', width=200)
+            c.pack(fill='x', padx=5, pady=2)
+            self.file_vars.append((var, file))
+
+
+        # Frame for Select/Deselect/Confirm
+        self.button_frame = tk.Frame(self)
+        self.button_frame.pack(anchor='w', padx=10, pady=(0, 20))
+
+        tk.Button(self.button_frame, text="Select All", command=self.select_all).pack(side=tk.LEFT, padx=5)
+        tk.Button(self.button_frame, text="Deselect All", command=self.deselect_all).pack(side=tk.LEFT, padx=5)
+        tk.Button(self.button_frame, text="Confirm Selection", command=self.confirm_selection).pack(side=tk.LEFT, padx=5)
+
+        # Interact Frame for Preview and Create
         self.Interact_Frame = tk.Frame(self)
-        self.Interact_Frame.pack(anchor='w', padx=10, pady=(0, 20))  
+        self.Interact_Frame.pack(anchor='w', padx=10, pady=(0, 20))
 
-        self.Preview_Button = tk.Button(self.Interact_Frame , text = 'Preview' , command= lambda : self.Preview_Interaction() )
-        self.Preview_Button.pack( side = tk.LEFT , anchor='w')
-        # self.Create_Dataset_Button = tk.Button(self.Interact_Frame , text = 'Create' , command= lambda: self.Create_ML_Dataset() )
-        self.Create_Dataset_Button = tk.Button(self.Interact_Frame , text = 'Create' , command = self.setup_process )
+        # self.Preview_Button = tk.Button(self.Interact_Frame, text='Preview', command=self.Preview_Interaction)
+        self.Preview_Button = tk.Button(self.button_frame, text='Preview', command=self.Preview_Interaction)
 
-        self.Create_Dataset_Button.pack( side = tk.LEFT , anchor='w')
+        self.Preview_Button.pack(side=tk.LEFT, anchor='w', padx=5)
 
-        self.Preview_Fig_Frame =  tk.Frame(self)
-        self.Preview_Fig_Frame.pack(anchor='w', side= tk.LEFT ,pady=5)
+        tk.Label(self.Interact_Frame , text = "ML Dataset Name :" ).pack( anchor='w', side=tk.LEFT ,padx=10 )
+        self.Text_Box_ML_Dataset_Name = tk.Text( self.Interact_Frame, bg='black',  fg='white', font=("Arial", 12), width=45, height=1, padx=10, pady=10 , state = 'normal' )
+        self.Text_Box_ML_Dataset_Name.pack(anchor='w', side=tk.LEFT ,padx=(0,10), pady=5)
+
+        self.Create_Dataset_Button = tk.Button(self.Interact_Frame, text='Create', command=lambda: Frame_Manager.setup_process(self))
+        self.Create_Dataset_Button.pack(side=tk.LEFT, anchor='w')
+
+        self.Cancel_Creation = tk.Button(self.Interact_Frame, text='Cancel', command=lambda: Frame_Manager.cancel_process(self) , state='disabled')
+        self.Cancel_Creation.pack(side=tk.LEFT, anchor='w')
+
+        self.Figure_Frame = tk.Frame(self)
+        self.Figure_Frame.pack(anchor='w', side=tk.LEFT, pady=5)
+
+
+    def select_all(self):
+        for var, _ in self.file_vars:
+            var.set(1)
+
+    def deselect_all(self):
+        for var, _ in self.file_vars:
+            var.set(0)
+
+    def confirm_selection(self):
+        self.selected_files = [file for var, file in self.file_vars if var.get() == 1]
+        # if not self.selected_files:
+        #     # If no file selected, you can handle this scenario as needed
+        #     print("No files selected!")
+        # else:
+        #     print("Selected files:", self.selected_files)
 
     def Preview_Interaction(self):
+        # Ensure files are selected
+        if not self.selected_files:
+            print("No files selected for preview!")
+            return
 
-        path = os.path.join(  self.controller.Data_Directory , self.file_selected.get() )
+        # Randomly select one file from the selected list for preview
+        selected_file_for_preview = np.random.choice(self.selected_files)
 
-        # print(path)
-        sim_h5 = h5py.File(path , 'r')
+        self.selected_file = selected_file_for_preview 
 
-        temp_segments =  pd.DataFrame(sim_h5["segments"][()])
-        temp_mc_hdr =  sim_h5['mc_hdr'] 
+        path = os.path.join(self.controller.Data_Directory, selected_file_for_preview)
+        sim_h5 = h5py.File(path, 'r')
+        temp_segments = sim_h5["segments"]
+        temp_mc_hdr = sim_h5["mc_hdr"]
 
-        temp_segments = temp_segments[ ( temp_segments['dE'] > 1.5 )   ]
+
         unique_ids = np.unique(temp_segments['event_id']).tolist()
+        random_event_id = np.random.choice(unique_ids)
+        random_vertex_id = np.random.choice( temp_mc_hdr[ temp_mc_hdr['event_id'] == random_event_id ]['vertex_id'] )
 
-        random_event_id  = np.random.choice(  unique_ids )
+        self.event_id_selected = random_event_id
+        self.vertex_id_selected = random_vertex_id
 
-        temp_segments = temp_segments[ (temp_segments['event_id'] == random_event_id)]
-        temp_mc_hdr   = temp_mc_hdr[ (temp_mc_hdr['event_id'] == random_event_id)]
-
-        cmap = cm.plasma
-        norm = plt.Normalize(vmin=0, vmax=max(temp_segments['dE']))
-
-        # Create Canvas
-        # Destroy old widgets in the Preview_Fig_Frame
-        if hasattr(self, 'fig'):
-            plt.close(self.fig)  # Close the old figure
-        for widget in self.Preview_Fig_Frame.winfo_children():
-            widget.destroy()
-
-        # Create subplot
-        self.preview_fig, self.preview_ax = plt.subplots( )
-
-        canvas = FigureCanvasTkAgg( self.preview_fig, master= self.Preview_Fig_Frame)  
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-
-        mc_hdr_unique_vertex_ids = np.unique( temp_mc_hdr['vertex_id'] ).tolist()
-
-        noise_indexes = [                           index 
-                         for index , vertex_id in zip( temp_segments.index.to_list() , temp_segments['vertex_id'].to_list() ) 
-                            if vertex_id not in  mc_hdr_unique_vertex_ids]
-        
-        test_group_df = temp_segments[ (temp_segments['vertex_id'] == mc_hdr_unique_vertex_ids[0] )]
-        
-
-        # Plot the clean vertex
-        c = test_group_df['dE']
-
-        self.preview_ax.scatter( test_group_df['z'] , test_group_df['y'] , c = c ,cmap = cmap , norm= norm , s = 7 )
-
-        # Add the noise back in 
-        noise_df = temp_segments[ temp_segments.index.isin( noise_indexes )]
-
-        c = noise_df['dE']
-        self.preview_ax.scatter( noise_df['z'] , noise_df['y'] , c = c ,cmap = cmap , norm= norm , s = 6)
-
-        self.preview_ax.set_xlim( self.controller.min_z_for_plot , self.controller.max_z_for_plot  )
-        self.preview_ax.set_ylim( self.controller.min_y_for_plot , self.controller.max_y_for_plot  )
-        self.preview_ax.set_xlabel( 'Z' )
-        self.preview_ax.set_ylabel( 'Y' )
-        canvas.draw()
-
-        toolbar = NavigationToolbar2Tk(canvas, self.Preview_Fig_Frame, pack_toolbar=False)
-        toolbar.update()
-        toolbar.pack(side=tk.LEFT, fill=tk.X)
-        # self.controller.geometry("900x900")
-
+        Pixel_Array_Script.Use_Pixel_Array.plot(self)
 
         return
 
-
-
-
-    def setup_process(self):
-        if not self.controller.running:
-            self.controller.running = True
-            self.Create_Dataset_Button.config(state='disabled')
-
-            # Initialize progress tracking variables
-            self.progress_value = 0
-            self.progress['value'] = 0
-            # self.progress['maximum'] = 100  # Set to 100%, we'll compute actual percentages
-            self.progress.config(maximum=100)   # Set to 100%, we'll compute actual percentages
-
-            threading.Thread(target=self.Create_ML_Dataset).start()
-            self.check_progress()  # Start checking progress in the main thread
-
-
-    def check_progress(self):
-        # Update the progress bar in the main thread
-        self.progress['value'] = self.progress_value
-        self.progress_label.config(text=f"{self.progress_value:.0f}%")
-        if self.controller.running:
-            # Schedule the next check
-            self.after(1, self.check_progress)
-        else:
-            # Re-enable the button when done
+    def Create_ML_Dataset_2(self):
+        # Ensure files are selected
+        if not self.selected_files:
+            print("No files selected for dataset creation!")
+            self.progress_value = 100
+            self.controller.running = False
             self.Create_Dataset_Button.config(state='normal')
+            return
 
 
-    def Create_ML_Dataset(self):
+        # Create a name for directory that will hold all dataset images
+        # Test_directory = "ML_IMAGE_DATASET"
+        Test_directory = str(self.Text_Box_ML_Dataset_Name.get('1.0' , tk.END) )
+        print(Test_directory)
 
-        #Create a name for directory that will hold all of the directory datasets
-        Test_directory = "Test_ML_File"
+        self.Text_Box_ML_Dataset_Name.config(state = 'disabled')
+        self.Cancel_Creation.config(state = 'normal')
+
+
         os.makedirs(Test_directory, exist_ok=True)
 
         # Create mapping for Directory Naming
-        Directory_Name_Map = {r"$\nu$-$e^{-}$ scattering"   : "Neutrino_Electron_Scattering" , 
-                                r"$\nu_{e}$-CC"               : "Neutrino_Electron_CC" , 
-                                r"$\nu_{e}$-NC"               : "Neutrino_Electron_NC" , 
-                                "Other"                       : "Other"}
+        Directory_Name_Map = {
+            r"$\nu$-$e^{-}$ scattering": "Neutrino_Electron_Scattering",
+            r"$\nu_{e}$-CC": "Electron_Neutrino",
+            r"$\nu_{e}$-NC": "Electron_Neutrino",
+            "Other": "Other"
+        }
         # Create sub-directories
-        for Dir_Name in list(Directory_Name_Map.values()) : 
-            _  = os.path.join( Test_directory , Dir_Name )
-            os.makedirs( _ , exist_ok = True)
+        for Dir_Name in list(Directory_Name_Map.values()):
+            _ = os.path.join(Test_directory, Dir_Name)
+            os.makedirs(_, exist_ok=True)
 
         # Create file name counters for images generated
-        Dir_File_Name_Counter = { file : 0 for file in list(Directory_Name_Map.keys() )}
+        Dir_File_Name_Counter = {file: 0 for file in list(Directory_Name_Map.keys())}
 
-        # Load the selected path & Get the segment data set.
-        path = os.path.join(  self.controller.Data_Directory , self.file_selected.get() )
-        sim_h5 = h5py.File(path , 'r')
-        temp_segments = sim_h5["segments"]
-        temp_segments = temp_segments[ ( temp_segments['dE'] > 1.5 )   ]
-        temp_segments =  pd.DataFrame(temp_segments[()])
-        temp_mc_hdr =  sim_h5['mc_hdr'] 
+        # We'll process all selected files
+        all_event_ids = []
+        selected_fileselected_file = []
+        for selected_file in self.selected_files:
+            path = os.path.join(self.controller.Data_Directory, selected_file)
+            sim_h5 = h5py.File(path, 'r')
+            temp_segments = sim_h5["segments"]
+            # temp_segments = temp_segments[(temp_segments['dE'] > 1.5)]
+            # temp_segments = pd.DataFrame(temp_segments[()])
+            temp_mc_hdr = sim_h5['mc_hdr']
+            # unique_ids = np.unique(temp_segments['event_id']).tolist()
+            unique_ids = np.unique(temp_mc_hdr['event_id']).tolist()
 
-        unique_ids = np.unique(temp_segments['event_id']).tolist()
+            all_event_ids.extend(unique_ids)
 
-        cmap = cm.plasma
+        
+        # Remove duplicates if needed
+        all_event_ids = list(set(all_event_ids))
+        num_events = len(all_event_ids)
 
         self.controller.running = True
-        self.progress.configure(maximum= len(unique_ids))
+        self.progress.configure(maximum=len(all_event_ids))
         self.Create_Dataset_Button.config(state='disabled')
-        # Loop for each event & and each vertex and create the desired adding it to the correct sub-directory
-        for i , event_id  in enumerate(unique_ids , start = 1) :
 
+        # Process the event_id in each selected file where it exists
 
-            temp_segments_event = temp_segments[ (temp_segments['event_id'] == event_id)]
-            temp_mc_hdr_event   = temp_mc_hdr[ (temp_mc_hdr['event_id'] == event_id)]
+        min_z, max_z = self.controller.min_z_for_plot, self.controller.max_z_for_plot
+        min_y, max_y = self.controller.min_y_for_plot, self.controller.max_y_for_plot
+        min_x, max_x = self.controller.min_x_for_plot, self.controller.max_x_for_plot
+        cnter = 0
+        for selected_file in self.selected_files:
+        # Loop for each event across all selected files
 
-            mc_hdr_vertex_ids = np.unique( temp_mc_hdr_event['vertex_id'] ).tolist()
-            noise_indexes = [ i for i in  temp_segments_event['vertex_id'] if i not in mc_hdr_vertex_ids]
+            # The condition below allows for interruption if needed
+            if self.controller.running == False:
+                break
 
-            for true_vertex in mc_hdr_vertex_ids:
+            path = os.path.join(self.controller.Data_Directory, selected_file)
+            sim_h5 = h5py.File(path, 'r')
+            temp_segments = sim_h5['segments']
+            temp_segments = temp_segments[ temp_segments['dE'] > 1.5 ]
+            temp_mc_hdr   = sim_h5['mc_hdr']
 
-                # try:
-                temp_mc_hdr_event_vetex = temp_mc_hdr_event[ (temp_mc_hdr_event['vertex_id'] == true_vertex  ) ]
-                temp_segments_event_vertex = temp_segments_event[( temp_segments_event['vertex_id'] == true_vertex )]
+            seg_unique_ids = np.unique( temp_segments['event_id'] )
 
-                if self.controller.min_z_for_plot < temp_mc_hdr_event_vetex['z_vert'] < self.controller.max_z_for_plot  and  self.controller.min_y_for_plot < temp_mc_hdr_event_vetex['y_vert'] < self.controller.max_y_for_plot and self.controller.min_x_for_plot < temp_mc_hdr_event_vetex['x_vert'] < self.controller.max_x_for_plot:
-                    pass
-                else:
+            for event_id in seg_unique_ids:
+                cnter += 1
+                self.progress_value = (cnter / num_events) * 100
+
+                # Check if processing should continue
+                if not self.controller.running:
+                    break
+
+                # Find indices where event_id matches
+                indices = np.where(temp_segments['event_id'] == event_id)[0]
+                if len(indices) == 0:
                     continue
 
-                if temp_mc_hdr_event_vetex['reaction'] == 7:
-                    interaction_label   = r"$\nu$-$e^{-}$ scattering"
+                # Extract segments for the current event_id
+                temp_segments_event = temp_segments[temp_segments['event_id'] == event_id]
+                temp_segments_event = pd.DataFrame(temp_segments_event)
 
-                elif temp_mc_hdr_event_vetex['nu_pdg'] == 12 and temp_mc_hdr_event_vetex['isCC'] == True:
-                    interaction_label   = r"$\nu_{e}$-CC"
+                # Extract mc_hdr entries for the current event_id
+                temp_mc_hdr_event = temp_mc_hdr[temp_mc_hdr['event_id'] == event_id]
 
-                elif temp_mc_hdr_event_vetex['nu_pdg'] == 12 and temp_mc_hdr_event_vetex['isCC'] == False:
-                    interaction_label   = r"$\nu_{e}$-NC"
-                else:
-                    interaction_label = 'Other'
+                # Get unique vertex_ids from mc_hdr_event
+                mc_hdr_vertex_ids = np.unique(temp_mc_hdr_event['vertex_id']).tolist()
 
+                # Optimize noise_indexes calculation using set operations
+                vertex_ids_set = set(mc_hdr_vertex_ids)
+                segments_vertex_ids = set(temp_segments_event['vertex_id'])
+                noise_indexes = list(segments_vertex_ids - vertex_ids_set)
 
-                norm = plt.Normalize(vmin=0, vmax=75 )
-                
-                noise_df = temp_segments_event[ temp_segments_event.index.isin(noise_indexes) ]
+                for true_vertex in mc_hdr_vertex_ids:
+                    # Extract mc_hdr_event_vertex and segments_event_vertex
+                    mask_vertex = temp_mc_hdr_event['vertex_id'] == true_vertex
+                    temp_mc_hdr_event_vertex = temp_mc_hdr_event[mask_vertex]
+                    temp_segments_event_vertex = temp_segments_event[temp_segments_event['vertex_id'] == true_vertex]
 
-                plt.scatter( temp_segments_event_vertex['z'] , temp_segments_event_vertex['y'] , c = temp_segments_event_vertex['dE'] , cmap = cmap , norm = norm , s = 6 )
-                plt.scatter( noise_df['z'] , noise_df['y'] , c = noise_df['dE'] , cmap = cmap , norm = norm , s = 6)
+                    # Ensure there is exactly one vertex per event
+                    if temp_mc_hdr_event_vertex.shape[0] != 1:
+                        continue  # Skip if multiple or no vertices found
 
-                plt.xlim( self.controller.min_z_for_plot , self.controller.max_z_for_plot  )
-                plt.ylim( self.controller.min_y_for_plot , self.controller.max_y_for_plot  )
-                plt.axis('off')
+                    # Extract coordinates to local variables
+                    z = temp_mc_hdr_event_vertex['z_vert'][0]
+                    y = temp_mc_hdr_event_vertex['y_vert'][0]
+                    x = temp_mc_hdr_event_vertex['x_vert'][0]
 
-                Dir_File_Name_Counter[ interaction_label ] += 1 
-                loop_path = os.path.join( Test_directory ,Directory_Name_Map[ interaction_label ] )
-                loop_path = os.path.join( loop_path , f"IMG_{Dir_File_Name_Counter[interaction_label]}.png" )
+                    # Optimized Spatial Filtering
+                    if (z <= min_z or z >= max_z or
+                        y <= min_y or y >= max_y or
+                        x <= min_x or x >= max_x):
+                        continue
 
-                plt.savefig( loop_path )
-                plt.close()
-                #     pass
-                    
-                # except:
-                #     continue
+                    # Determine interaction label based on reaction and neutrino properties
+                    reaction = temp_mc_hdr_event_vertex['reaction'][0]
+                    nu_pdg = temp_mc_hdr_event_vertex['nu_pdg'][0]
+                    isCC = temp_mc_hdr_event_vertex['isCC'][0]
 
-            self.progress_value = (i / len(unique_ids)) * 100  # Calculate percentage
+                    if reaction == 7:
+                        interaction_label = r"$\nu$-$e^{-}$ scattering"
+                    elif nu_pdg == 12 and isCC:
+                        interaction_label = r"$\nu_{e}$-CC"
+                    elif nu_pdg == 12 and not isCC:
+                        interaction_label = r"$\nu_{e}$-NC"
+                    else:
+                        interaction_label = 'Other'
 
+                    # Extract noise segments
+                    if noise_indexes:
+                        noise_df = temp_segments_event[temp_segments_event['vertex_id'].isin(noise_indexes)]
+                    else:
+                        noise_df = pd.DataFrame(columns=temp_segments_event.columns)  # Empty DataFrame
 
+                    # Construct the file path for saving
+                    loop_path = os.path.join(Test_directory, Directory_Name_Map.get(interaction_label, 'Other'))
+                    loop_filename = f"IMG_{Dir_File_Name_Counter.get(interaction_label, 0)}_{event_id}_{true_vertex}.png"
+                    loop_path = os.path.join(loop_path, loop_filename)
 
+                    # Concatenate only non-empty DataFrames
+                    dfs_to_concat = [df for df in [temp_segments_event_vertex, noise_df] if not df.empty]
+                    if dfs_to_concat:
+                        DF = pd.concat(dfs_to_concat, ignore_index=True)
+                    else:
+                        DF = pd.DataFrame(columns=temp_segments_event_vertex.columns)  # or handle as needed
+
+                    # Save the DataFrame for Machine Learning
+                    Pixel_Array_Script.Use_Pixel_Array.Save_For_ML(self, DF, loop_path)
+
+                    # Update the directory file name counter
+                    Dir_File_Name_Counter[interaction_label] = Dir_File_Name_Counter.get(interaction_label, 0) + 1
+
+        self.progress_value = 100
         self.controller.running = False
-        self.progress_value = 100  # Ensure progress bar reaches 100%
-        self.check_progress()      # Update the GUI one last time
         self.Create_Dataset_Button.config(state='normal')
+        self.Text_Box_ML_Dataset_Name.config(state = 'normal')
+        self.Cancel_Creation.config(state = 'disabled')
+
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 
 
+class Load_Dataset_Page( tk.Frame):
+
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
 
 
+        page_title_frame = tk.Frame(self)
+        page_title_frame.pack( anchor= 'w' , pady=10)
 
-    pass
+        # Title and Navigation
+        tk.Button(page_title_frame, text="Back", command=lambda: controller.show_frame(Training_And_Eval_Options_Page)).pack(anchor='w', padx=10 , side= tk.LEFT)
+        tk.Label(page_title_frame, text="Load Image ", font=("Helvetica", 16)).pack( padx=50, anchor='w' , side = tk.LEFT)
+
+        dir_select_frame = tk.Frame(self)
+        dir_select_frame.pack( anchor='w' , pady = (10 , 50) )
+
+        self.selected_dir = tk.StringVar()
+
+        self.entry_box = tk.Entry(dir_select_frame, textvariable=self.selected_dir ,  bg='black',  fg='white' , width=80 , state='readonly')
+        self.entry_box.pack(anchor='w', side=tk.LEFT, padx=10, pady=10)
+
+        self.selected_dir.trace_add('write', lambda *args: self.Class_Select_Dropdown_Func() )
+
+        select_dir_buttnon = tk.Button( dir_select_frame , text= "Dataset Directory" , command= lambda: Frame_Manager.select_directory_window(self , self.entry_box))
+        select_dir_buttnon.pack( anchor='w' , side= tk.LEFT )
+
+        self.View_Dataset_Control_Frame = tk.Frame(self)
+        self.View_Dataset_Control_Frame.pack( anchor= 'w' , pady=10)
+
+        tk.Label(self.View_Dataset_Control_Frame, text="Class :" ).pack(anchor='w', side=tk.LEFT) 
+
+
+        self.Class_selected = tk.StringVar()
+        self.Class_dropdown = ttk.Combobox( self.View_Dataset_Control_Frame , textvariable= self.Class_selected , state= 'readonly'  )
+        self.Class_dropdown.pack(anchor='w', side=tk.LEFT) 
+
+        self.Class_selected.trace_add('write', lambda *args: self.Image_Select_Dropdown_Func() )
+
+        tk.Label(self.View_Dataset_Control_Frame, text="Image :" ).pack(anchor='w', side=tk.LEFT) 
+
+        self.Image_Selected = tk.StringVar()
+        self.Image_dropdown = ttk.Combobox( self.View_Dataset_Control_Frame , textvariable= self.Image_Selected , state= 'readonly'  )
+        self.Image_dropdown.pack(anchor='w', side=tk.LEFT) 
+
+        self.Image_Selected.trace_add( 'write' , lambda *args: self.Load_Image()  )
+
+        self.Image_Frame = tk.Frame(self)
+        self.Image_Frame.pack(anchor= 'w' , pady=10)
+
+
+    def Class_Select_Dropdown_Func(self):
+
+        Class_Dir_Names  = os.listdir(self.entry_box.get())
+
+        self.Class_dropdown.config( values = sorted(Class_Dir_Names) )
+
+
+    def Image_Select_Dropdown_Func(self):
         
+        path = os.path.join( str(self.entry_box.get()) , str(self.Class_selected.get() ) )
+        Image_File_Names  = os.listdir( path )
+
+        sorted_Image_File_Names = sorted(Image_File_Names, key=lambda x: int(x.split('_')[1].split('.')[0]))
+
+        self.Image_dropdown.config( values = sorted_Image_File_Names )
+        self.Image_dropdown.set('')
+
+    def Load_Image(self):
+
+        try:
+            photo_path = os.path.join(  str(self.selected_dir.get()) , str(self.Class_selected.get())   ) 
+            photo_path = os.path.join(  photo_path , str(self.Image_Selected.get())  ) 
+
+
+            img = Image.open(photo_path)
+            original_width, original_height = img.size
+            new_size = (original_width // 4, original_height // 4)
+            img_resized = img.resize(new_size, Image.Resampling.LANCZOS) 
+            Photo = ImageTk.PhotoImage(img_resized)
+
+            # Clear previous images in the frame
+            for widget in self.Image_Frame.winfo_children():
+                widget.destroy()
+
+
+            label = tk.Label(self.Image_Frame, image=Photo)
+            label.image = Photo  # Keep a reference so the image is not garbage collected
+            label.pack(anchor='w', pady=10)
+
+        except:
+            pass
+
+        return
+
+        
+
+        
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
+
+class Training_And_Eval_Options_Page(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+
+        page_title_frame = tk.Frame(self)
+        page_title_frame.pack( anchor= 'w' , pady=10)
+
+        tk.Button(page_title_frame , text = "back", command= lambda: controller.show_frame(StartPage) ).pack( padx=10 , anchor='w', side = tk.LEFT)
+        tk.Label(page_title_frame, text="Select_Option", font=("Helvetica", 16)).pack( padx=50 , anchor='w' , side = tk.LEFT)
+
+        tk.Button(self, text="Architecture Configuration",
+                  command=lambda: controller.show_frame(Model_Architecture_Page)).pack( padx = 10 ,pady=(20,0) ,anchor='w')
+
+        tk.Button(self, text="Train Model",
+                  command=lambda: controller.show_frame(Model_Training_Page)).pack(  padx=10  ,anchor='w')
+
+        tk.Button(self, text="Evaluate Model",
+                  command=lambda: controller.show_frame(StartPage)).pack( padx=10   ,anchor='w')
+
+class Model_Architecture_Page(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+
+
+        # Title and Navigation
+        page_title_frame = tk.Frame(self)
+        page_title_frame.pack( anchor= 'w' , pady=10)
+
+        tk.Button(page_title_frame , text = "back", command= lambda: controller.show_frame(Training_And_Eval_Options_Page) ).pack( padx=10 , anchor='w', side = tk.LEFT)
+        tk.Label(page_title_frame, text="Model Architecture Configuration", font=("Helvetica", 16)).pack( padx=50 , anchor='w' , side = tk.LEFT)
+        
+
+        # Create a canvas and scrollbar for the entire page
+        self.canvas = tk.Canvas(self)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollbar.pack(side=tk.RIGHT, fill='y')
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # Create a frame inside the canvas to hold all configuration
+        self.inner_frame = tk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), height = 1000 , width = 1000 , window=self.inner_frame, anchor='nw')
+        # self.canvas.create_window((0, 0), height = 10 , width = 10 , window=self.inner_frame, anchor='nw')
+
+
+        # Bind the configuration event to update scroll region
+        self.inner_frame.bind("<Configure>", lambda event: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+
+        # Initialize variables and create the layout
+        self.model = None
+        self.conv_layers = []
+        self.dense_layers = []
+        self.flatten_added = False
+
+        # Create the layout
+        self.create_layout()
+
+    def create_layout(self):
+        """Create the entire layout for the model configuration in inner_frame."""
+        for widget in self.inner_frame.winfo_children():
+            widget.destroy()
+
+        #Input Shape 
+        input_shape_frame = tk.Frame(self.inner_frame)
+        input_shape_frame.pack(anchor='w', padx=10, pady=5)
+        tk.Label(input_shape_frame, text="Input Shape (H,W,Channels):").pack(side=tk.LEFT, padx=(0,5))
+
+        self.input_height = tk.StringVar(value="256")
+        self.input_width = tk.StringVar(value="256")
+        self.input_channels = tk.StringVar(value="3")
+
+        tk.Entry(input_shape_frame, textvariable=self.input_height, width=5).pack(side=tk.LEFT)
+        tk.Entry(input_shape_frame, textvariable=self.input_width, width=5).pack(side=tk.LEFT, padx=5)
+        tk.Entry(input_shape_frame, textvariable=self.input_channels, width=5 , state='disabled').pack(side=tk.LEFT)
+
+        # Convolution Layers 
+        conv_frame = tk.Frame(self.inner_frame)
+        conv_frame.pack(anchor='w', padx=10, pady=5, fill='x')
+        tk.Label(conv_frame, text="Convolution Layers").pack(anchor='w')
+        tk.Button(conv_frame, text="Add Convolution Layer", command=self.add_conv_layer).pack(anchor='w', pady=5)
+        self.conv_layer_container = tk.Frame(conv_frame)
+        self.conv_layer_container.pack(anchor='w', padx=10, pady=5)
+
+        # Flatten Layer 
+        flatten_frame = tk.Frame(self.inner_frame)
+        flatten_frame.pack(anchor='w', padx=10, pady=5)
+        tk.Button(flatten_frame, text="Add Flatten Layer", command=self.add_flatten_layer).pack(anchor='w')
+
+        # Dense Layers 
+        dense_frame = tk.Frame(self.inner_frame)
+        dense_frame.pack(anchor='w', padx=10, pady=5)
+        tk.Label(dense_frame, text="Dense (Fully Connected) Layers").pack(anchor='w')
+        tk.Button(dense_frame, text="Add Dense Layer", command=self.add_dense_layer).pack(anchor='w', pady=5)
+        self.dense_layer_container = tk.Frame(dense_frame)
+        self.dense_layer_container.pack(anchor='w', padx=10, pady=5)
+
+        #  Output Classes 
+        output_shape_frame = tk.Frame(self.inner_frame)
+        output_shape_frame.pack(anchor='w', padx=10, pady=5)
+        tk.Label(output_shape_frame, text="Output Classes:").pack(side=tk.LEFT, padx=(0,5))
+        self.output_classes = tk.StringVar(value="3")
+        tk.Entry(output_shape_frame, textvariable=self.output_classes, width=5).pack(side=tk.LEFT)
+
+        #  Build & Reset Buttons 
+        build_frame = tk.Frame(self.inner_frame)
+        build_frame.pack(anchor='w', padx=10, pady=10)
+        tk.Button(build_frame, text="Build & Compile Model", command=self.build_and_compile_model).pack(side=tk.LEFT, padx=5)
+        tk.Button(build_frame, text="Reset Architecture", command=self.reset_architecture).pack(side=tk.LEFT, padx=5)
+
+        #  Model Summary 
+        summary_frame = tk.Frame(self.inner_frame )
+        # summary_frame.pack(anchor='w', padx=10, pady=10, fill='both', expand=True)
+        summary_frame.pack(anchor='w', padx=40, pady=10, fill='both', expand=True)
+
+        # Increase height here as requested
+        # self.model_summary_text = tk.Text(summary_frame, width=80, height=30, wrap='none', font=("Courier", 8))
+        self.model_summary_text = tk.Text(summary_frame, width=3, height=30, wrap='none', font=("Courier", 8))
+        self.model_summary_text.pack(side=tk.LEFT, fill='both', expand=True)
+
+        summary_scrollbar_vertical = ttk.Scrollbar(summary_frame, orient='vertical', command=self.model_summary_text.yview)
+        summary_scrollbar_vertical.pack(side=tk.RIGHT, fill='y')
+        self.model_summary_text.config(yscrollcommand=summary_scrollbar_vertical.set)
+
+        summary_scrollbar_horizontal = ttk.Scrollbar(summary_frame, orient='horizontal', command=self.model_summary_text.xview)
+        summary_scrollbar_horizontal.pack(side=tk.BOTTOM, fill='x')
+        self.model_summary_text.config(xscrollcommand=summary_scrollbar_horizontal.set)
+
+    def add_conv_layer(self):
+        layer_frame = tk.Frame(self.conv_layer_container)
+        layer_frame.pack(anchor='w', pady=5)
+
+        tk.Label(layer_frame, text="Filters:").pack(side=tk.LEFT)
+        filters_var = tk.StringVar(value="32")
+        tk.Entry(layer_frame, textvariable=filters_var, width=5).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(layer_frame, text="Kernel Size:").pack(side=tk.LEFT)
+        kernel_var = tk.StringVar(value="3")
+        tk.Entry(layer_frame, textvariable=kernel_var, width=5).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(layer_frame, text="Activation:").pack(side=tk.LEFT)
+        activation_var = tk.StringVar(value="leaky_relu")
+        activation_combobox = ttk.Combobox(layer_frame, textvariable=activation_var, 
+                                           values=["leaky_relu","relu", "sigmoid", "tanh", "linear"], state='readonly', width=8)
+        activation_combobox.pack(side=tk.LEFT, padx=5)
+
+        self.conv_layers.append((filters_var, kernel_var, activation_var))
+        self.inner_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def add_flatten_layer(self):
+        if self.flatten_added:
+            return
+        self.flatten_added = True
+        flatten_label_frame = tk.Frame(self.inner_frame)
+        flatten_label_frame.pack(anchor='w', padx=20, pady=5)
+        tk.Label(flatten_label_frame, text="Flatten Layer Added", fg='blue').pack(anchor='w')
+
+        self.inner_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def add_dense_layer(self):
+        layer_frame = tk.Frame(self.dense_layer_container)
+        layer_frame.pack(anchor='w', pady=5)
+
+        tk.Label(layer_frame, text="Units:").pack(side=tk.LEFT)
+        units_var = tk.StringVar(value="64")
+        tk.Entry(layer_frame, textvariable=units_var, width=5).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(layer_frame, text="Activation:").pack(side=tk.LEFT)
+        dense_activation_var = tk.StringVar(value="leaky_relu")
+        dense_activation_combobox = ttk.Combobox(layer_frame, textvariable=dense_activation_var, 
+                                                 values=["leaky_relu","relu", "sigmoid", "tanh", "linear"], 
+                                                 state='readonly', width=8)
+        dense_activation_combobox.pack(side=tk.LEFT, padx=5)
+
+        self.dense_layers.append((units_var, dense_activation_var))
+        self.inner_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def build_and_compile_model(self):
+
+        self.model_summary_text.delete(1.0, tk.END)
+
+        model = models.Sequential()
+
+        input_h = int(self.input_height.get())
+        input_w = int(self.input_width.get())
+        input_c = int(self.input_channels.get())
+
+        if self.conv_layers:
+            first_filters, first_kernel, first_activation = self.conv_layers[0]
+            model.add(layers.Conv2D(filters=int(first_filters.get()),
+                                    kernel_size=(int(first_kernel.get()), int(first_kernel.get())),
+                                    activation=first_activation.get(),
+                                    input_shape=(input_h, input_w, input_c)))
+            for (f_var, k_var, a_var) in self.conv_layers[1:]:
+                model.add(layers.Conv2D(filters=int(f_var.get()),
+                                        kernel_size=(int(k_var.get()), int(k_var.get())),
+                                        activation=a_var.get()))
+                model.add(layers.MaxPooling2D((2, 2)))
+        else:
+            model.add(layers.InputLayer(input_shape=(input_h, input_w, input_c)))
+
+        if self.flatten_added:
+            model.add(layers.Flatten())
+
+        for (u_var, a_var) in self.dense_layers:
+            model.add(layers.Dense(int(u_var.get()), activation=a_var.get()))
+
+        num_classes = int(self.output_classes.get())
+        model.add(layers.Dense(num_classes, activation='softmax'))
+
+        model.compile(optimizer='adam', loss='SparseCategoricalCrossentropy', metrics=['accuracy'])
+
+        self.controller.model = model
+
+        stringlist = []
+        self.controller.model.summary(print_fn=lambda x: stringlist.append(x))
+        short_model_summary = "\n".join(stringlist)
+        self.model_summary_text.insert(tk.END, short_model_summary)
+        self.model_summary_text.insert(tk.END, "\n\nModel compiled successfully!")
+
+    def reset_architecture(self):
+        self.controller.model = None
+        self.conv_layers.clear()
+        self.dense_layers.clear()
+        self.flatten_added = False
+
+        self.create_layout()
+        self.inner_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+
+class Model_Training_Page(tk.Frame):
+
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+
+
+        page_title_frame = tk.Frame(self)
+        page_title_frame.pack( anchor= 'w' , pady=10)
+
+        # Title and Navigation
+        tk.Button(page_title_frame, text="Back", command=lambda: controller.show_frame(Training_And_Eval_Options_Page)).pack(anchor='w', padx=10 , side= tk.LEFT)
+        tk.Label(page_title_frame, text="Model Training ", font=("Helvetica", 16)).pack( padx=50, anchor='w' , side = tk.LEFT)
+
+        dir_select_frame = tk.Frame(self)
+        dir_select_frame.pack( anchor='w' , pady = (10 , 50) )
+
+        self.selected_dir = tk.StringVar()
+        text_box = tk.Entry( dir_select_frame, textvariable=self.selected_dir , bg='black',  fg='white', font=("Arial", 12), width=90, state = 'disabled' )
+        text_box.pack(anchor='w', side=tk.LEFT ,padx=10, pady=10)
+
+        select_dir_buttnon = tk.Button( dir_select_frame , text= "Select Directory" , command= lambda: Frame_Manager.select_directory_window(self , text_box))
+        select_dir_buttnon.pack( anchor='w' , side= tk.LEFT )
+
+        train_split_params_frame = tk.Frame(self)
+        train_split_params_frame.pack( anchor='w' , pady = (10 , 20) )
+
+        self.train_size_text_selected = tk.IntVar()
+        tk.Label(train_split_params_frame , text = "train_size :" ).pack(anchor='w' , side = tk.LEFT )
+        train_size_text_box = tk.Entry( train_split_params_frame , textvariable= self.train_size_text_selected  , bg = 'black', fg='white', font=("Arial", 12), state = 'normal' )
+        train_size_text_box.pack( anchor='w', side = tk.LEFT  )
+        train_size_text_box.delete(0, tk.END)
+        train_size_text_box.insert(0,70)
+        
+
+        self.val_size_text_selected = tk.IntVar()
+        tk.Label(train_split_params_frame , text = "val_size :" ).pack(anchor='w' , side = tk.LEFT )
+        val_size_text_box = tk.Entry( train_split_params_frame , textvariable= self.val_size_text_selected, bg='black',  fg='white', font=("Arial", 12), state = 'normal' )
+        val_size_text_box.pack( anchor='w' ,side = tk.LEFT  )
+        val_size_text_box.delete(0, tk.END)
+        val_size_text_box.insert(0,20)
+
+
+        self.test_size_text_selected = tk.IntVar()
+        tk.Label(train_split_params_frame , text = "test_size :" ).pack(anchor='w' , side = tk.LEFT )
+        test_size_text_box = tk.Entry( train_split_params_frame, textvariable= self.test_size_text_selected,  bg='black',  fg='white', font=("Arial", 12), state = 'normal')
+        test_size_text_box.pack( anchor='w' ,side = tk.LEFT  )
+        test_size_text_box.delete(0, tk.END)
+        test_size_text_box.insert(0,10)
+
+        Model_Training_Params_Frame = tk.Frame(self)
+        Model_Training_Params_Frame.pack( anchor='w' , pady = (10 , 20) )
+
+        self.Epoch_size_text_selected = tk.IntVar()
+        tk.Label(Model_Training_Params_Frame , text = "Num Epoches :" ).pack(anchor='w' , side = tk.LEFT )
+        Epoch_size_text_box = tk.Entry( Model_Training_Params_Frame , textvariable= self.Epoch_size_text_selected  , bg = 'black', fg='white', font=("Arial", 12), state = 'normal' )
+        Epoch_size_text_box.pack( anchor='w', side = tk.LEFT  )
+
+        self.Batch_size_text_selected = tk.IntVar()
+        tk.Label(Model_Training_Params_Frame , text = "batch_size :" ).pack(anchor='w' , side = tk.LEFT )
+        Batch_size_text_box = tk.Entry( Model_Training_Params_Frame , textvariable= self.Batch_size_text_selected  , bg = 'black', fg='white', font=("Arial", 12), state = 'normal' )
+        Batch_size_text_box.pack( anchor='w', side = tk.LEFT  )
+
+
+        tk.Button(self, text='Test_Train', command=lambda: self.Train_Model()).pack(anchor='w')
+
+        self.Training_Plots_Output_Frame = tk.Frame(self)
+        self.Training_Plots_Output_Frame.pack( anchor='w' , side=tk.LEFT )
+
+
+
+    def Train_Model(self):
+        from PIL import Image
+        import os
+
+        # Determine original image size
+        first_image_path = os.path.join(self.selected_dir.get(), os.listdir(self.selected_dir.get())[0])
+        with Image.open(first_image_path) as img:
+            original_size = img.size  # (width, height)
+        original_width, original_height = original_size
+
+        # Load dataset with original image size
+        Raw_Data = tf.keras.utils.image_dataset_from_directory(
+            self.selected_dir.get(),
+            image_size=(original_height, original_width),
+            batch_size=32,  # Adjust as needed
+            shuffle=True,
+            seed=123,
+            label_mode='int'
+        )
+
+        # Split the dataset
+        total_size = len(Raw_Data)
+        if ( self.train_size_text_selected.get() + 
+             self.val_size_text_selected.get()   + 
+             self.test_size_text_selected.get()  )  ==  100:
+            
+            train_size  = int(total_size * (self.train_size_text_selected.get() / 100))
+            val_size    = int(total_size * (self.val_size_text_selected.get() / 100))
+            test_size   = int(total_size * (self.test_size_text_selected.get() / 100))
+        else:
+            print("Not Adding up to 100")
+            return
+        
+        train = Raw_Data.take(train_size)
+        val = Raw_Data.skip(train_size).take(val_size)
+        test = Raw_Data.skip(train_size + val_size).take(test_size)
+
+        # Compile and train the model
+        self.controller.model.compile(
+            optimizer='adam',
+            loss='SparseCategoricalCrossentropy',
+            metrics=['accuracy']
+        )
+        print(self.controller.model.summary())
+
+        logdir = 'logs'
+        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
+        hist = self.controller.model.fit(
+            train,
+            epochs=int(self.Epoch_size_text_selected.get()),
+            validation_data=val,
+            callbacks=[tensorboard_callback]
+        )
+
+        # Plot training history
+        self.train_fig, self.train_ax = plt.subplots(nrows=1, ncols=2)
+
+        ax_loss, ax_acc = self.train_ax
+
+        canvas = FigureCanvasTkAgg(self.train_fig, master=self.Training_Plots_Output_Frame)
+        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        ax_loss.plot(hist.history['loss'], color='teal', label='loss')
+        ax_loss.plot(hist.history['val_loss'], color='orange', label='val_loss')
+        ax_loss.set_xlabel("Epoch")
+        ax_loss.set_ylabel("Loss")
+        ax_loss.set_title("Loss", fontsize=17)
+
+        ax_acc.plot(hist.history['accuracy'], color='teal', label='accuracy')
+        ax_acc.plot(hist.history['val_accuracy'], color='orange', label='val_accuracy')
+        ax_acc.set_xlabel("Epoch")
+        ax_acc.set_ylabel("Accuracy %")
+        ax_acc.set_title("Accuracy", fontsize=17)
+
+        self.train_fig.suptitle('Training Metrics', fontsize=20)
+        ax_loss.legend(loc="upper left")
+        ax_acc.legend(loc="upper left")
+        self.train_fig.tight_layout()
+        canvas.draw()
+
+        # Add a navigation toolbar to the Figure_Frame
+        toolbar = NavigationToolbar2Tk(canvas, self.Training_Plots_Output_Frame, pack_toolbar=False)
+        toolbar.update()
+        toolbar.pack(side=tk.LEFT, fill=tk.X)
+
+
+    
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
@@ -725,15 +1290,12 @@ class Plot_Selection_Page(tk.Frame):
         tk.Button(self, text="Custom Plot",
                     command=lambda: controller.set_plot_type('custom') ).pack(anchor='w', pady=2)    
 
-        # tk.Button(self, text='Compare "Cleaning" Methods',
-        #             command=lambda: controller.show_frame(Dataset_View_Page)).pack(anchor='w', pady=2)
-
         tk.Button(self, text='Plot Settings',
                     command=lambda: controller.show_frame(Dataset_View_Page) , state= 'disabled').pack(anchor='w', pady=2)
 
         tk.Button(self, text="Back to Start Page",
                     command=lambda: controller.show_frame(StartPage)).pack(anchor='w', pady=2)
-        # tk.Button(self, text="Create Line Plot", command=self.create_line_plot).pack( anchor='w' )
+
 
 
     def create_line_plot(self):
@@ -749,14 +1311,10 @@ class Plot_Selection_Page(tk.Frame):
 
 class Figure_Creation_Page(tk.Frame):
     def __init__(self, parent, controller):
+
         super().__init__(parent)
-
-        Page_Title_str = tk.StringVar()
-        # Page Title
-        Page_Title = tk.Label(self, text="Figure Creation", font=("Helvetica", 16) , textvariable = Page_Title_str ).pack(anchor='w', pady=(0, 10))
-        # tk.Label(self, text="Figure Creation", font=("Helvetica", 16)).pack(anchor='w' )
-
         self.controller = controller
+
         # Locate all the column names within the "segments" dataset and make them CheckButtons that can be pressed
         try:
             path = os.path.join( controller.Data_Directory , controller.File_Names[0] ) 
@@ -772,9 +1330,24 @@ class Figure_Creation_Page(tk.Frame):
         self.Back_Button = tk.Button(
                                 self.back_frame, text='Back to Figure Selection' , command= lambda: controller.show_frame(Plot_Selection_Page)
                                         )
-        self.Back_Button.pack(anchor='w', side=tk.LEFT)
-        # Create file selection Frame 
+        self.Back_Button.pack(anchor='w', side=tk.LEFT, padx = 10)
 
+        # Page Title
+        Page_Title_str = tk.StringVar()
+        Page_Title = tk.Label(self.back_frame, text="Figure Creation", font=("Helvetica", 16) , textvariable = Page_Title_str ).pack(anchor='w', pady=(0, 10) , padx=50)
+
+
+
+        # Progress Bar and Percentage Frame
+        self.progressive_frame = tk.Frame(self)
+        self.progressive_frame.pack(anchor='w', padx=10, pady=(0, 20))  
+
+        self.progress = ttk.Progressbar( self.progressive_frame,  orient="horizontal", length=600,  mode="determinate" ) 
+        self.progress_label = tk.Label(self.progressive_frame , text = '' , font=("Arial", 12))
+        self.progress.pack(anchor='w' , side=tk.LEFT)
+        self.progress_label.pack(anchor='w' , side=tk.LEFT )
+
+        # Create file selection Frame 
         self.file_select_frame = tk.Frame(self)
         self.file_select_frame.pack(anchor='w', pady=20)
 
@@ -809,7 +1382,7 @@ class Figure_Creation_Page(tk.Frame):
         self.x_combobox = ttk.Combobox(
             axis_select_frame, textvariable=self.x_selected, values=column_names, state='readonly', width=10
         )
-        self.x_combobox.pack(anchor='w',side=tk.LEFT)
+        self.x_combobox.pack(anchor='w',side=tk.LEFT , padx=6 )
 
     
         tk.Label(axis_select_frame, text='y axis: ').pack(side=tk.LEFT)
@@ -858,6 +1431,14 @@ class Figure_Creation_Page(tk.Frame):
             self.dropdown_3d = ttk.Combobox( self.Dropdown_3D_frame , textvariable= self.dropdown_3d_select , values= ['No' , 'Yes'] , width=10  )
             self.dropdown_3d.pack( side= tk.LEFT)
             self.dropdown_3d_select.trace('w', lambda *args: self.Lock_Unlock_Cmap(self.dropdown_3d_select, self.z_combobox))
+
+            tk.Label( self.Dropdown_3D_frame , text = "pixel array: " ).pack(side = tk.LEFT , padx= 10)
+            self.pixel_array_select = tk.StringVar()
+            self.dropdown_pixel = ttk.Combobox( self.Dropdown_3D_frame , textvariable= self.pixel_array_select , values= ['No' , 'Yes'] , width=10 )
+            self.dropdown_pixel.pack( side = tk.LEFT)
+
+            # self.pixel_array_select.trace('w', lambda *args: self.Lock_Unlock_Cmap(self.pixel_array_select, self.z_combobox))
+
 
             Page_Title_str.set("Figure Creation : Scatter Plot")
         
@@ -913,7 +1494,8 @@ class Figure_Creation_Page(tk.Frame):
 
 
         # Add "Create Button" button below which can create a plt fig 
-        tk.Button(self, text='Create' , command= lambda : self.Plot_Type_Map() ).pack(anchor='w', pady=10)
+        self.Create_Fig_Button = tk.Button(self, text='Create' , command= lambda : self.Plot_Type_Map(self) )
+        self.Create_Fig_Button.pack(anchor='w', pady=10)
 
         self.Figure_Frame = tk.Frame(self)
         self.Figure_Frame.pack(anchor='w', side= tk.LEFT ,pady=5)
@@ -956,8 +1538,12 @@ class Figure_Creation_Page(tk.Frame):
 
     def Plot_Type_Map(self, *args):
         if self.controller.plot_type == 'scatter':
+            
+            if self.pixel_array_select.get() != 'Yes' : 
+                Generic_Plot_script.Generic_Plot.Create_Scatter_Fig(self)
 
-            Generic_Plot_script.Generic_Plot.Create_Scatter_Fig(self)
+            else:
+                Frame_Manager.setup_process(self)
 
             pass
 
@@ -1069,17 +1655,17 @@ class Custom_Figure_Page(tk.Frame):
 
 
     def Custom_Selection(self):
+
+        if hasattr(self, 'fig'):
+            plt.close(self.custom_fig)  # Close the old figure
+        for widget in self.Custom_Figure_Frame.winfo_children():
+            widget.destroy()
+
+
+        # if not hasattr(self, 'particle_frame'):
+
+
         if str(self.custom_fig_seleceted.get()) == 'Track_dE_Analysis':
-
-            if hasattr(self, 'fig'):
-                plt.close(self.custom_fig)  # Close the old figure
-            for widget in self.Custom_Figure_Frame.winfo_children():
-                widget.destroy()
-
-
-            # if not hasattr(self, 'particle_frame'):
-
-
             self.custom_fig = plt.figure( figsize=(6, 6) )
             canvas = FigureCanvasTkAgg( self.custom_fig, master= self.Custom_Figure_Frame)  
             canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
@@ -1090,12 +1676,21 @@ class Custom_Figure_Page(tk.Frame):
 
  
 
-            Custom_Plot_script.Custom_Plot.Track_dE_Analysis(self , {   'Plot_Mode'     : 'Single_Plot' , 
-                                                                        'canvas'        : canvas        ,
-                                                                        'fig'           : self.custom_fig,   } ) 
-                                                            # 'ax'            : self.custom_ax } )
+            # Custom_Plot_script.Custom_Plot.Track_dE_Analysis(self , {   'Plot_Mode'     : 'Single_Plot' , 
+            #                                                             'canvas'        : canvas        ,
+            #                                                             'fig'           : self.custom_fig,   } ) 
+
+
+            getattr(Custom_Plot_script.Custom_Plot, str(self.custom_fig_seleceted.get()) )( self , {   'Plot_Mode'     : 'Single_Plot' , 
+                                                                                                        'canvas'        : canvas        ,
+                                                                                                        'fig'           : self.custom_fig,   } )
             
 
+
+        getattr(Custom_Plot_script.Custom_Plot, str(self.custom_fig_seleceted.get()) )( self , {   'Plot_Mode'     : 'Single_Plot' , 
+                                                                                            'canvas'        : 1        ,
+                                                                                            'fig'           : 1,   } )
+                
 
 
 
@@ -1108,11 +1703,6 @@ class Custom_Figure_Page(tk.Frame):
         if self.custom_fig_seleceted.get() ==  'Track_dE_Analysis':
             
             self.file_selected.trace('w', self.on_file_selected)
-
-
-
-
-
 
 
     def on_file_selected(self, *args):
@@ -1145,7 +1735,6 @@ class Custom_Figure_Page(tk.Frame):
     def on_event_selected(self, *args):
         """Callback triggered when a new event is selected from the dropdown."""
 
-
         path = os.path.join( self.controller.Data_Directory , self.file_selected.get() )
         self.vertex_id_selected = tk.StringVar()
         with h5py.File(path , 'r') as sim_h5:
@@ -1153,7 +1742,6 @@ class Custom_Figure_Page(tk.Frame):
                 event_segment = sim_h5[ (sim_h5['event_id'] == int(self.event_id_selected.get()) ) ]
                 unique_vertex_ids = list(np.unique( event_segment['vertex_id'] ))
 
-                # print(event_segment)
 
         if hasattr(self, 'vertex_combobox') and self.vertex_combobox:
             self.vertex_combobox['values'] = unique_vertex_ids  
@@ -1170,9 +1758,6 @@ class Custom_Figure_Page(tk.Frame):
             )
             self.vertex_combobox.pack(anchor='w', side=tk.LEFT)
 
-            # self.event_id_selected.trace('w', self.on_event_selected)
-
-
 
 
         return
@@ -1184,13 +1769,21 @@ class Custom_Figure_Page(tk.Frame):
 class Settings_Page(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
-        tk.Label(self, text="Settings", font=("Helvetica", 16)).pack(pady=10, padx=10 , anchor='w' )
+
+        page_title_frame = tk.Frame(self)
+        page_title_frame.pack( anchor= 'w' , pady=(10, 30))
+
+        tk.Button(page_title_frame , text = "back", command= lambda: controller.show_frame(StartPage) ).pack( padx=10 , anchor='w', side = tk.LEFT)
+        tk.Label(page_title_frame, text="Settings", font=("Helvetica", 16)).pack( padx=50 , anchor='w' , side = tk.LEFT)
 
         tk.Button(self, text='Select Files',
-                  command= lambda: controller.show_frame(File_Selection_Page)).pack( anchor='w' )
+                  command= lambda: controller.show_frame(File_Selection_Page)).pack( anchor='w' , padx=10  )
         
-        tk.Button(self, text="Back to Start Page",
-                  command=lambda: controller.show_frame(StartPage)).pack( anchor='w' )
+
+        tk.Button(self, text='Cleaning Method',
+                command= lambda: controller.show_frame(Cleaning_Method_Select_Page) , state='disabled' ).pack( anchor='w' , padx=10 )
+        
+
         
 
 
@@ -1202,23 +1795,25 @@ class ScrollableFrame(ttk.Frame):
     def __init__(self, container, *args, **kwargs):
         super().__init__(container, *args, **kwargs)
 
-        canvas = tk.Canvas(self, borderwidth=0 , width = 600)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        self.scrollable_frame = tk.Frame(canvas)  # Use tk.Frame here for background
+        # Create a canvas
+        canvas = tk.Canvas(self, borderwidth=0 , width=600 , height=100)
+        canvas.pack(side="left", fill="both", expand=True)
 
+        # Create a scrollbar
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+
+        # Frame that will hold the actual widgets
+        self.scrollable_frame = tk.Frame(canvas)
         self.scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(
-                scrollregion=canvas.bbox("all")
+                scrollregion=canvas.bbox("all")   # Update scrollregion to encompass all widgets
             )
         )
 
         canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-
         canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
 
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
@@ -1230,8 +1825,12 @@ class File_Selection_Page(tk.Frame):
         self.controller = controller
         self.file_vars = []  # List to hold IntVar for each file Checkbutton
 
-        # Header Label
-        tk.Label(self, text="File Selection", font=("Helvetica", 16)).pack(pady=10, padx=10, anchor='w')
+        # Title and Back Navigation
+        page_title_frame = tk.Frame(self)
+        page_title_frame.pack( anchor= 'w' , pady=(10, 30))
+
+        tk.Button(page_title_frame , text = "back", command= lambda: controller.show_frame(Settings_Page) ).pack( padx=10 , anchor='w', side = tk.LEFT)
+        tk.Label(page_title_frame, text="File Selection", font=("Helvetica", 16)).pack( padx=50 , anchor='w' , side = tk.LEFT)
 
         # Frame for Select/Deselect buttons
         button_frame = tk.Frame(self)
@@ -1250,6 +1849,7 @@ class File_Selection_Page(tk.Frame):
             try:
                 # Assuming controller.File_Names is a list of filenames
                 File_Names = controller.File_Names
+
 
                 if File_Names:
                     tk.Label(self, text="Files:", font=("Helvetica", 12)).pack(pady=5, anchor='w', padx=10)
@@ -1282,8 +1882,7 @@ class File_Selection_Page(tk.Frame):
         confirm_button = tk.Button(self, text="Confirm Selection", command=self.confirm_selection)
         confirm_button.pack(pady=10, padx=10, anchor='w')
 
-        # Back Button
-        tk.Button(self, text="Back to Settings Page", command=lambda: controller.show_frame(Settings_Page)).pack(pady=10, padx=10, anchor='w')   
+
 
     def select_all(self):
         """Select all file checkboxes."""
@@ -1302,25 +1901,61 @@ class File_Selection_Page(tk.Frame):
 
     def confirm_selection(self):
         """Update the Allowed_Files in the controller based on user selection."""
+
         selected = self.get_selected_files()
-        self.controller.Allowed_Files = selected  # Update the Allowed_Files list
+        if not selected:
+            # If no specific files selected, show all files
+            self.controller.Allowed_Files = sorted(self.controller.File_Names)
+        else:
+            self.controller.Allowed_Files = sorted(selected) # Update the Allowed_Files list
+
+
+        # Reinitialize frames that rely on Allowed_Files
+        self.controller.reinitialize_frame(View_Segments_Page)
+        self.controller.reinitialize_frame(View_mc_hdr_Page)
+        self.controller.reinitialize_frame(View_traj_Page)
+        self.controller.reinitialize_frame(Figure_Creation_Page)
+        self.controller.reinitialize_frame(Custom_Figure_Page)
+        self.controller.reinitialize_frame(Create_Dataset_Page)
+
+        self.controller.show_frame(File_Selection_Page)
+
         print("Allowed Files Updated:", self.controller.Allowed_Files)
 
 
-        
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 
+class Cleaning_Method_Select_Page(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+        self.file_vars = []  # List to hold IntVar for each file Checkbutton
+
+        # Header Frame: Back button and Header label
+        self.header_frame = tk.Frame(self)
+        self.header_frame.pack( side = tk.LEFT , anchor='nw', padx=10, pady=20)  
+
+        # Back Button
+        back_button = tk.Button( self.header_frame,  text='Back',   command=lambda: controller.show_frame(Settings_Page)  )
+        back_button.pack(side=tk.LEFT , anchor='w')
+
+        # Header Label
+        header_label = tk.Label( self.header_frame,  text="Cleanning Methood Selection",  font=("Helvetica", 16) )
+        header_label.pack(side=tk.LEFT, anchor = 'w',  padx=50)
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
 
 class Frame_Manager():
 
+    def __init__(self, frame):
+        self.frame = frame
+        self.controller = frame.controller  # Access the controller from the frame
 
     def update_dropdown(self):
         """Refresh the dropdown menu with the latest Allowed_Files."""
         menu = self.files_drop_down["menu"]
         menu.delete(0, "end")  # Clear existing options
-
 
     def refresh_content(self):
         """Refresh dropdown and DataFrame display when the frame is shown."""
@@ -1456,6 +2091,8 @@ class Frame_Manager():
         # Retrieve the latest Allowed_Files from the controller
         if hasattr(self.controller, 'Allowed_Files') and self.controller.Allowed_Files:
             files = self.controller.Allowed_Files
+        elif hasattr(self.controller, 'File_Names') and self.controller.File_Names:
+            files = self.controller.File_Names
         else:
             files = ["No Files Available"]
 
@@ -1468,6 +2105,71 @@ class Frame_Manager():
             self.selected_file.set(files[0])
         else:
             self.selected_file.set("No Files Available")
+
+    def select_directory_window(self , Text_Box ):
+        
+        directory_path = tk.filedialog.askdirectory( initialdir= str(os.getcwd()) , title="Select a Directory")
+
+        # Text_Box.config( state = 'normal')
+        # Text_Box.set( str(directory_path) )
+        if directory_path:
+            Text_Box.config( state = 'normal' )
+            Text_Box.delete( 0 , tk.END)
+            Text_Box.insert( 0, directory_path)
+            Text_Box.config(state = 'disabled')
+
+        else:
+            Text_Box.config(state='normal')
+            Text_Box.delete("1.0", tk.END)
+            Text_Box.insert("1.0", directory_path)
+            Text_Box.config(state='disabled')
+        return
+
+    def setup_process(self):
+        if not self.controller.running:
+            self.controller.running = True
+            # self.frame.Create_Dataset_Button.config(state='disabled')
+            
+            self.progress_value = 0
+            self.progress['value'] = 0
+            self.progress.config(maximum=100) 
+
+            self.controller.running = True
+
+
+            if str(self.__class__.__name__) == 'Create_Dataset_Page':
+                self.Create_Dataset_Button.config(state='disabled')
+                Frame_Manager.check_progress(self)
+
+                threading.Thread(target=self.Create_ML_Dataset_2).start()
+
+
+            else:
+                print(self.__class__.__name__ )
+                self.Create_Fig_Button.config(state='disabled')
+                Frame_Manager.check_progress(self)
+
+                threading.Thread(target=Pixel_Array_Script.Use_Pixel_Array.plot, args=(self,)).start()
+
+    def cancel_process(self):
+        if self.controller.running:
+            self.progress['value'] = 100
+            self.controller.running = False
+            print('Cancelled' , self.controller.running )
+
+
+    def check_progress(self):
+        self.progress['value'] = self.progress_value
+        self.progress_label.config(text=f"{self.progress_value:.2f}%")
+        # print("running")
+        if self.controller.running:
+            # self.after(100, self.check_progress)  # Check every 100 ms
+            self.after(100, lambda : Frame_Manager.check_progress(self))  # Check every 100 ms
+
+        else:
+            if str(self.__class__.__name__) == 'Create_Dataset_Page':
+                # self.frame.Create_Dataset_Button.config(state='normal')
+                pass 
 
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||#
