@@ -62,6 +62,25 @@ $ python name_of_analysis_script.py --sim_file /pnfs/dune/persistent/users/aboot
 ```
 Where name_of_analysis_script.py is whatever we called our analysis script and you can pass whatever .hdf5 file we want
 
+A good place to start is with an analysis script is `edephdf5_analysis_starter.py`. It has minimal dependencies, some useful comments and examples of 1D, 2D and 3D plot making with 3 of the datasets found in the `edep-sim` HDF5 files. It has several useful command line arguments:
+
+```
+python edephdf5_analysis_starter.py --help
+usage: edephdf5_analysis_starter.py [-h] [-e] -f INPUT_HDF5 [-i INTERACTION_LIMIT] [-o OUTFILE_STUB] [-s SPILL_LIMIT]
+
+options:
+  -h, --help            show this help message and exit
+  -e, --evds_only       Only make event display style plots.
+  -f INPUT_HDF5, --input_hdf5 INPUT_HDF5
+                        Path and file name of .EDEPSIM.hdf5 file of interest.
+  -i INTERACTION_LIMIT, --interaction_limit INTERACTION_LIMIT
+                        Only consider the first interaction_limit interactions per spill for event display making. Set to -1 to consider all.
+  -o OUTFILE_STUB, --outfile_stub OUTFILE_STUB
+                        Add a string to the end of the output pdf file name - use for unique output naming.
+  -s SPILL_LIMIT, --spill_limit SPILL_LIMIT
+                        Only consider the first spill_limit spills for event display making. Set to -1 to consider all.
+```
+
 ### Note on HDF5 Files
  -  We are using HDF5 files located in the following path:
 ```console
