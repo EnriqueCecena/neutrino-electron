@@ -256,7 +256,8 @@ with PdfPages(f"edephdf5_analysis_starter{outfile_stub}.pdf") as f_out:
         ax.elev = 0
         # Make the x data axis run directly into the figure.
         ax.azim = 270
-        ax.set_xlabel("")
+        ax.set_xlabel("z (cm)")
+        ax.set_ylabel("")
         f_out.savefig()
         plt.close()
 
