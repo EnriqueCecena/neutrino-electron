@@ -5,7 +5,7 @@ This document provides the necessary instructions to set up the software require
 ## Setup
 
 **Setting up the SL7 environment**  
-  -  Before connecting to the DUNE computers via SSH, set up the SL7 environment with the following command:
+  -  After connecting to the DUNE computers via SSH, set up the SL7 environment with the following command:
 
 ```console
 $ /cvmfs/oasis.opensciencegrid.org/mis/apptainer/current/bin/apptainer shell --shell=/bin/bash \
