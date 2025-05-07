@@ -1,4 +1,3 @@
-# Import necessary libraries and modules
 import os
 import tkinter as tk 
 import h5py
@@ -16,14 +15,11 @@ from matplotlib import colormaps
 import Main_Run_File 
 
 class Use_Pixel_Array:
-    """
-    A class to handle pixel-based data visualization and processing.
-    """
+
+    # A class with function for pixel-based data visualisation and processing.
 
     def plot(self):
-        """
-        Plots pixel-based data from an HDF5 file and displays it in a Tkinter GUI.
-        """
+
         # Close the previous figure if it exists to prevent memory leaks
         if hasattr(self, 'fig'):
             plt.close(self.fig)
@@ -58,14 +54,29 @@ class Use_Pixel_Array:
         max_z = round(918.2)
         
         # Define granularity for pixels and coarse bins in centimeters
-        # pixel_granularity = 0.4  # Fine granularity (commented out)
+        # pixel_granularity = 0.4  # Fine granularity 
+        # pixel_granularity = 0.5  # Fine granularity 
         pixel_granularity = 1.5  # Fine granularity
-        coarse_granularity = 20.0  # Coarse bin size
+        # pixel_granularity = 1.5  # Fine granularity
+        coarse_granularity = 20.0  # Coarse bin size, used to speed up generation
 
         # Generate coordinate ranges for Z, Y, and X axes based on granularity
         Cube_Coords_Xs = np.arange(min_x, max_x, pixel_granularity)
         Cube_Coords_Zs = np.arange(min_z, max_z, pixel_granularity)
         Cube_Coords_Ys = np.arange(min_y, max_y, pixel_granularity)
+
+        print( len(Cube_Coords_Zs) , ' x ' , len(Cube_Coords_Ys) ,' = ' , len(Cube_Coords_Zs) * len(Cube_Coords_Ys) )
+
+        # for  p_g in [ 0.4 , 0.5 , 1, 1.5 , 2 , 2.5 ]:
+
+
+        #     print(p_g)
+        #     temp_Cube_Coords_Xs = np.arange(min_x, max_x, p_g)
+        #     temp_Cube_Coords_Zs = np.arange(min_z, max_z, p_g)
+        #     temp_Cube_Coords_Ys = np.arange(min_y, max_y, p_g)
+        #     print( f'Z X Y  : {len(temp_Cube_Coords_Zs)} x {len(temp_Cube_Coords_Ys)}')
+        #     print('\n\n')
+
 
         # Initialize dictionaries to hold pixel data
         Pixel_Dict = {}
@@ -81,8 +92,11 @@ class Use_Pixel_Array:
         segments_event = segments_event[segments_event['dE'] > 2]
 
         # If a vertex ID is selected, further filter the segments
-        if self.vertex_id_selected:
-            segments_event = segments_event[segments_event['vertex_id'] == self.vertex_id_selected]
+        try:
+            if self.vertex_id_selected:
+                segments_event = segments_event[segments_event['vertex_id'] == self.vertex_id_selected]
+        except:
+            pass
 
         # Convert the filtered segments to a pandas DataFrame for easier manipulation
         segments_event = pd.DataFrame(segments_event)
@@ -150,14 +164,17 @@ class Use_Pixel_Array:
                 norm = plt.Normalize(vmin=0, vmax=75)  # Normalize energy values
                 sm = ScalarMappable(cmap=cmap, norm=norm)  # Create scalar mappable for colorbar
                 sm.set_array([])
-                plt.colorbar(sm, ax=self.ax)  # Add colorbar to the plot
+
+                cbar = plt.colorbar(sm, ax=self.ax) # Add colorbar to the plot
+                cbar.set_label('dE [MEV]')
         else:
             # Use default 'plasma' colormap if no custom colormap is selected
             cmap = colormaps['plasma']
             norm = plt.Normalize(vmin=0, vmax=75)
             sm = ScalarMappable(cmap=cmap, norm=norm)
             sm.set_array([])
-            plt.colorbar(sm, ax=self.ax)
+            cbar = plt.colorbar(sm, ax=self.ax)
+            cbar.set_label('dE [MEV]')
 
         # Group segments by their coarse (z_bin, y_bin) combination
         coarse_grouped = segments_event.groupby(['coarse_z_bin', 'coarse_y_bin'])
@@ -250,13 +267,17 @@ class Use_Pixel_Array:
         max_z = round(918.2)
 
         # Define granularity for pixels and coarse bins in centimeters
-        # pixel_granularity = 0.4  # Fine granularity (commented out)
+        # pixel_granularity = 0.4  # Fine granularity
         pixel_granularity = 1.5  # Fine granularity
-        coarse_granularity = 40.0  # Coarse bin size
+
+        coarse_granularity_z = 40.0  # Coarse bin size
+        coarse_granularity_y = 40.0  # Coarse bin size
+
 
         # Generate coarse bin coordinates based on coarse granularity
-        coarse_z_coords = np.arange(min_z, max_z, coarse_granularity)
-        coarse_y_coords = np.arange(min_y, max_y, coarse_granularity)
+        coarse_z_coords = np.arange(min_z, max_z, coarse_granularity_z)
+        coarse_y_coords = np.arange(min_y, max_y, coarse_granularity_y)
+
 
         # Initialize or reset the pixel_array_dict to store segment indices per pixel
         if not hasattr(self, 'pixel_array_dict'):
@@ -265,8 +286,9 @@ class Use_Pixel_Array:
             self.pixel_array_dict = {k: [] for k in self.pixel_array_dict.keys()}
 
         # Create bin edges for coarse granularity
-        coarse_z_bins = np.arange(min_z, max_z + coarse_granularity, coarse_granularity)
-        coarse_y_bins = np.arange(min_y, max_y + coarse_granularity, coarse_granularity)
+        coarse_z_bins = np.arange(min_z, max_z + coarse_granularity_z, coarse_granularity_z)
+        coarse_y_bins = np.arange(min_y, max_y + coarse_granularity_y, coarse_granularity_y)
+
 
         # Assign each segment to a coarse Z-bin and Y-bin
         DF['coarse_z_bin'] = np.digitize(DF['z'], bins=coarse_z_bins) - 1
@@ -275,12 +297,38 @@ class Use_Pixel_Array:
         # Group segments by their coarse (z_bin, y_bin) combination
         coarse_grouped = DF.groupby(['coarse_z_bin', 'coarse_y_bin'])
 
-        dots_per_inch = 400  # Define resolution for the saved figure
+        # This has been changed ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        # Prepare the matplotlib figure with specified DPI
-        self.fig, self.ax = plt.subplots(dpi=dots_per_inch)
+        # dots_per_inch = 400  # Define resolution for the saved figure
+
+        # # Prepare the matplotlib figure with specified DPI
+        # self.fig, self.ax = plt.subplots(dpi=dots_per_inch)
+
+        # This has been changed ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        dots_per_inch = 1
+
+        z_range = max_z - min_z
+        y_range = max_y - min_y
+
+        n_z = int(z_range / pixel_granularity)
+        n_y = int(y_range / pixel_granularity)
+
+
+        width_in_inches = n_z / dots_per_inch
+        height_in_inches = n_y / dots_per_inch
+
         cmap = cm.plasma  # Choose the 'plasma' colormap
         norm = plt.Normalize(vmin=0, vmax=75)  # Normalize energy values
+
+
+        # Compute background color correctly
+        background_color = cmap(norm(0))  # Get color from colormap
+        # Create figure with the exact pixel size desired
+        # self.fig, self.ax = plt.subplots( figsize=(width_in_inches, height_in_inches) , dpi=dots_per_inch )
+        self.fig, self.ax = plt.subplots( figsize=(width_in_inches, height_in_inches) , dpi=dots_per_inch )
+        self.ax.set_position([0, 0, 1, 1])
+
 
         # Iterate over each coarse bin to subdivide into fine bins and plot
         for cz_idx, cz in enumerate(coarse_z_coords):
@@ -290,12 +338,12 @@ class Use_Pixel_Array:
                     bin_hits = coarse_grouped.get_group((cz_idx, cy_idx))
 
                     # Define fine bin coordinates within the current coarse bin
-                    fine_z_coords = np.arange(cz, cz + coarse_granularity, pixel_granularity)
-                    fine_y_coords = np.arange(cy, cy + coarse_granularity, pixel_granularity)
+                    fine_z_coords = np.arange(cz, cz + coarse_granularity_z, pixel_granularity)
+                    fine_y_coords = np.arange(cy, cy + coarse_granularity_y, pixel_granularity)
 
                     # Create fine bin edges for digitization
-                    fine_z_bins = np.arange(cz, cz + coarse_granularity + pixel_granularity, pixel_granularity)
-                    fine_y_bins = np.arange(cy, cy + coarse_granularity + pixel_granularity, pixel_granularity)
+                    fine_z_bins = np.arange(cz, cz + coarse_granularity_z + pixel_granularity, pixel_granularity)
+                    fine_y_bins = np.arange(cy, cy + coarse_granularity_y + pixel_granularity, pixel_granularity)
 
                     # Create a copy of bin_hits to avoid SettingWithCopyWarning
                     bin_hits = bin_hits.copy()
@@ -331,8 +379,10 @@ class Use_Pixel_Array:
                                 )
                                 self.ax.add_patch(pixel)  # Add the patch to the plot
                 else:
-                    # If the coarse bin is empty, skip plotting its fine bins
                     continue
+
+
+        self.ax.set_facecolor( background_color )
 
         # Set the plot's X and Y axis limits to match the coordinate ranges
         self.ax.set_xlim(min_z, max_z)
@@ -340,7 +390,10 @@ class Use_Pixel_Array:
         self.ax.axis('off')  # Hide the axes for a cleaner image
 
         # Save the figure as an image file with tight layout and no padding
-        plt.savefig(Save_Path, bbox_inches='tight', pad_inches=0)
+        # plt.savefig(Save_Path, bbox_inches='tight', pad_inches=0)
+        plt.savefig(Save_Path, bbox_inches= None , pad_inches=0 , facecolor = background_color )
         plt.close()  # Close the figure to free memory
 
-        return  # End of Save_For_ML method
+        return
+
+
