@@ -58,8 +58,8 @@ To execute the code, provide the path to the data directory as an argument when 
 
 ```
 
-python Main_Run_File.py -f /Users/.../RHC_Datasets
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^ -- path to directory containing h5py datasets
+python Main_Run_File.py 
+                         
 
 ```
 
