@@ -20,25 +20,37 @@ This repository contains scripts designed to visualize simulated DUNE datasets, 
 Ensure you have the following Python libraries installed:
 
 - `os`
-- `h5py`
 - `argparse`
 - `numpy`
 - `pandas`
+- `h5py`
+- `scipy`
+- `seaborn`
+- `sklearn`
+- `tensorflow`
 - `tkinter`
+- `PIL`
+- `tqdm`
 - `matplotlib`
 - `threading`
+
 
 
 Ensure you have the following scripts in the same directory as "Main_Run_File.py":
 
 - `pdg_id_script.py`
 - `Generic_Plot_script.py`
+- `Pixel_Array_Script.py`
+- `Generic_Plot_script.py`
 - `Custom_Plot_script.py`
+- `Model_Training_script.py`
+- `Model_Evaluation_script.py`
+- 
 
 You can install the required libraries using `pip`:
 
 ```bash
-pip install h5py argparse numpy pandas tkinter matplotlib
+pip install h5py argparse numpy pandas tkinter matplotlib ...
 
 ```
 
