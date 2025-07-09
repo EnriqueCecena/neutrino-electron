@@ -46,18 +46,13 @@ Usage
 
 Command-Line Arguments
 
-The application accepts the following command-line arguments:
-	•	-f, --Data_Directory (Required): Path to the directory containing simulation data files.
 
 Running the Application
 
 Navigate to the project directory and execute the script with the required arguments:
 
-python Main_Run_File.py -f path/to/data_directory
+python main.py 
 
-Example:
-
-python Main_Run_File.py -f ./data
 
 Application Interface:
 
