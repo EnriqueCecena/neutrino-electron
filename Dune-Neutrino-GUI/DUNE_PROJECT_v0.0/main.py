@@ -144,9 +144,9 @@ class App(tk.Tk):
             frame = PageClass(self.container, self)
             # key by class
             self.frames[PageClass] = frame
-            # also key by the string name
+
             self.frames[page_name] = frame
-            setattr(self, page_name, frame)   # if you want `self.Advance_Class_Selection_Page` too
+            setattr(self, page_name, frame)   
             frame.grid(row=0, column=0, sticky="nsew")
 
 
